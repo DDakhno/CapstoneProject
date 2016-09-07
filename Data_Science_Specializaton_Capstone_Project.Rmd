@@ -180,7 +180,7 @@ megabytes, or about one gigabyte when loaded in the memory for analysis. Having 
 procedures in mind, the corpus *in toto* is definitely too big. We use randomized selection preparing the work data set 
 (effectively `r prob_train*100`% of all lines).
 
-```{r Building train corpus,echo = F, cache=T}
+```{r Building train corpus,echo = F, cache=F}
 setwd(file.path(datadir,"final/en_US"))
 system("wc -l *.txt >fileinfo.log")
 fileinfo <- read.table("fileinfo.log")
@@ -215,7 +215,7 @@ the data set stays manageable.
 
 We load and read in the reference english word lists from Wordnet and SCOWL projects as well.
 
-```{r Building reference word lists,echo=FALSE, cache=T, split= F}
+```{r Building reference word lists,echo=FALSE, cache=F, split= F}
 if (!dir.exists(file.path(tmpdir,"before"))) {
         dir.create(file.path(tmpdir,"before"),recursive = T)
         dir.create(file.path(tmpdir,"after"),recursive = T)
@@ -302,13 +302,13 @@ dir(file.path(datadir,"en_dicts"))
 
 The next performance relevant steps to be made are removing of articles, numbers (low predictive strength) and of longer 
 non-verbal character sequences and trimming the text with respect to white spaces and punctuation marks (we leave them in). 
-Than  the words are to be filtered away, written with non-latin  characters and after it those, not found in the reference 
-word variants list (total of `r  nrow(dt_words_EN)` words and variants from british, american, canadian and other flavors 
+Than  the words are to be filtered away, written with non-latin  characters and after it those, not found in the **reference 
+list of total of `r  nrow(dt_words_EN)` words and variants** from british, american, canadian and other flavors 
 of English). We reject the stemming of the data set and reference word list.
 
-This is a way, *tidy data* being prepared, suitable for the regular exploration.
+This is a way *tidy data* being prepared, suitable for the regular exploration.
 
-```{r Building tidy data,echo=FALSE, cache=TRUE}
+```{r Building tidy data,echo=FALSE, cache=F}
 
 wordsnogo <- c("the","a","an") 
 
@@ -418,8 +418,8 @@ invisible(gc())
 
 
 `r round(cntinitial-cntlatin)` or (`r round((cntinitial-cntlatin)/cntinitial*100,3)`%) words were 
-identified and removed as containing the non-latin characters.  
-
+identified and removed as containing the non-latin characters. Further, `r cntlatin - cnteng` words 
+could not be identified as english.
 
 
 ----------------------------------------------------------------------------------  
@@ -427,7 +427,7 @@ identified and removed as containing the non-latin characters.
 ## Exploratory data analysis
 
 
-```{r DTM, echo = F, cache = T}
+```{r DTM, echo = F, cache=F}
 #Creating Term-Document Matrices
 
 dtmTr <- DocumentTermMatrix(x = tidyTrainCorpus)
@@ -540,7 +540,7 @@ marks for a "natural boundaries" building pairs, so that the last word before pe
 but one, but not as a first in the next pair with the word after the punctuation mark. After the mark the count began from scratch, 
 The same principle were applied to tri- and four-grams. Logically, this principle should weigh for the future prediction.
 
-```{r echo = F, cache = T}
+```{r echo = F, cache=F}
 ## Library tau
 
 bigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content, 
@@ -575,7 +575,7 @@ But we pack it carefully in the separate *R data.table* as the first building bl
 
 
 
-```{r echo = F, cache = T}
+```{r echo = F, cache=F}
 ## The same for word triplets
 
 trigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content, 
