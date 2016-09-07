@@ -1,0 +1,1046 @@
+---
+title: "Milestone Project: Explorative Data Analysis"
+subtitle: "Data Science Specializaton Capstone Project"
+author: "D.Dakhno"
+date: "September 6, 2016"
+output: html_document
+---
+
+-------------------------------------------------------------------  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+```
+
+```{r 'Initial_configuration', echo=FALSE}
+suppressMessages(library(tm))
+library(stringi)
+suppressMessages(library(data.table))
+suppressMessages(library(dplyr))
+suppressMessages(library(wordcloud))
+library(cluster)
+library(tau)
+
+#Cleaning the workspace
+rm(list = ls())
+invisible(gc())
+
+
+## Modelling relevant configuration
+dictToLower <- TRUE
+dictToTrimmComb <- TRUE
+
+docsToLower <- dictToLower
+docsToStem  <- FALSE
+docsToTrimmComb <- dictToTrimmComb
+
+prob_train <- .08 #train probability resp. all corpus lines
+# prob_test <- prob_train/2  #test to the whole corpus
+# prob_valid <- prob_train/2 #validation to the whole corpus
+##########################################################################################
+
+## Technical configuration
+homedir <- "/home/d/R-Work/CapstoneProject"
+datadir <- file.path(homedir,"data")
+tmpdir <- paste(homedir,"/tmp",prob_train, sep = "")
+endicts <- file.path(datadir,"en_dicts")
+scowldir <- file.path(datadir,"SCOWL")
+projectcorpURL <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+projectcorpFile <- rev(stri_split(str = projectcorpURL,fixed = "/")[[1]])[1]
+result_file <- file.path(tmpdir,"results.log")
+```
+
+------------------------------------------------------  
+# Introduction
+
+This report presents basic approach and results of the exploratory data analysis of the text corpus from  english 
+speaking auditorium. The final goal of the research is building of next word prediction algorithm and engine. Such 
+an engine may be used at internet sites and in mobile  devices. 
+
+The report is generated with R/knitr, the most of the shown data are calculated at the  execution time.
+
+On the other hand, the report may be used for marketing purposes, so it should be understandable to a *non-data scientist* manager. 
+Consequently, the main part of source code is hidden in the text. 
+
+# Definition of goals
+
+The goals of the milestone project are to apply and demonstrate the following abilities:
+
+- Obtaining and preprocessing the data.
+- Applying of the tools in the area of natural language processing and text mining.
+- Exploratory analysis of the data.
+- Formulating of the technical terms and prototyping the first and plain prediction algorithm.
+- Using the elaborateed insights and iterating the think-try-think cycle we can subsequently 
+develop more sophisticated concepts and models.
+
+----------------------------------------------------------------------------------  
+
+# Language data sources
+
+The data of an English [text corpus](https://en.wikipedia.org/wiki/Text_corpus) called 
+[HC Corpora](www.corpora.heliohost.org) were downloaded and analysed as a primary training 
+data set. As a reference english word lists were used the data from 
+[Wordnet](https://wordnet.princeton.edu/wordnet/download/) and 
+[SCOWL](http://vorboss.dl.sourceforge.net/project/wordlist/SCOWL) projects.
+
+----------------------------------------------------------------------------------  
+
+# Initial expectations and assumptions
+
+- The word set of the text corpus is expected to mainly correspond to the standard english one.
+- Trivial english words and expressions are expected to be on the top by the frequency.
+- Typos and conscious mutilations are usual in Internet language.
+- Written expressive language of the news might differ from that of blogs or Twitter, the possible differences will be not 
+studied or considered at this moment.
+- Internet jargon and dialects like smileys and emoticons should become the subject of a studies, other 
+than this one.
+- Non-english words will be ignored, having the final goal of prediction in mind.
+
+----------------------------------------------------------------------------------  
+
+# Technical backgrounds
+
+Downloading, processing and exploration analysis of the data were performed using tools of [R](https://www.r-project.org/), 
+a free software environment for statistical computing and graphics.  
+Aiming a non-data scientist manager with this report, all used processing and configuration routines and  stay 
+under the hood, being still available  for technical experts as 
+[source code at GitHub](https://github.com/DDakhno/CapstoneProject).
+
+----------------------------------------------------------------------------------  
+
+# Data loading
+
+Data loading and unpacking is performed hidden using R function *utils::download.file* and *utils:unzip* . 
+
+Here only the proofs of the work done:
+
+```{r}
+## Status before downloading
+
+system(paste("ls -lR",datadir))
+
+```
+
+```{r echo = F}
+setwd(homedir)
+
+if (!dir.exists(file.path(tmpdir,"before"))) {
+        dir.create(file.path(tmpdir,"before"),recursive = T)
+        dir.create(file.path(tmpdir,"after"),recursive = T)
+}
+
+if (!dir.exists(endicts)) dir.create(endicts,recursive = T)
+if (!dir.exists(scowldir))    dir.create(scowldir,recursive = T)
+
+## Check, if the project data file is here; if not, download and unpack
+
+if (!dir.exists(file.path(datadir,"final","en_US"))) {
+        setwd(datadir)
+        projectcorpFile <- file.path(datadir,projectcorpFile)
+        if (!file.exists(projectcorpFile))
+                download.file(url = projectcorpURL,destfile = projectcorpFile,mode = "wb")
+        engfiles <- grep("en_US.*txt",unzip(zipfile = projectcorpFile, list = T)[[1]],value = T)
+        unzip(zipfile = projectcorpFile, files = engfiles)
+}
+```
+
+```{r}
+## Status after downloading and unpacking the text corpus
+
+system(paste("ls -lR",datadir))
+```
+----------------------------------------------------------------------------------  
+
+# Exploratory data analysis
+
+----------------------------------------------------------------------------------  
+
+## Preliminary text corpus analysis and preprocessing the data
+
+```{r Preliminary analysis, echo=F }
+# Total umber of lines, words and characters in the files of the text corpus
+lines_words <- system(paste("wc  ",file.path(datadir,"final","en_US/*.txt")), intern = T)
+# Total umber of bytes  in the files of the text corpus
+bytes <- system(paste("wc  -c ",file.path(datadir,"final","en_US/*.txt")), intern = T)
+```
+
+Some technical details are unavoidable at this place, as we must reach some decisions, influencing feasibility 
+and credibility of the following statistical evaluations and thus predictions.
+
+Evaluation of the text corpus at the command line shows, that the text files has each from 899288 to 
+2360148 lines and respectively from 30373559 to 34365936 "words" (any sequence of non-blank characters).  
+
+From the technical point of view, the total volume of the raw text data reaches `r round(583077241/(1024*1024))` 
+megabytes, or about one gigabyte when loaded in the memory for analysis. Having the memory and CPU intensive explorative 
+procedures in mind, the corpus *in toto* is definitely too big. We use randomized selection preparing the work data set 
+(effectively `r prob_train*100`% of all lines).
+
+```{r Building train corpus,echo = F, cache=T}
+setwd(file.path(datadir,"final/en_US"))
+system("wc -l *.txt >fileinfo.log")
+fileinfo <- read.table("fileinfo.log")
+system("rm fileinfo.log")
+# Building the main document corpus
+## We should not read in the the memory huge files to use only a trickle, 
+## so we implement some spare equivalent
+## Partitioning the data into train/test/validation
+
+ndoc <- nrow(fileinfo)-1
+trainCorpus <- Corpus(VectorSource(1:ndoc))
+# testCorpus <- Corpus(VectorSource(1:ndoc))
+# validCorpus <- Corpus(VectorSource(1:ndoc))
+
+i <- 1
+while (i < nrow(fileinfo)) {
+        
+        nr <- fileinfo[i,1]
+        mask <- as.logical(rbinom( nr, 1, prob = prob_train))
+        fil <- as.character(fileinfo[i,2])
+        trainCorpus[[i]]$content <- readLines(fil, ok = T, warn = F)[mask]
+        rm(mask)
+        i <- i + 1
+}
+
+invisible(gc())
+```
+
+Loaded in the memory, data set has `r paste(sapply(trainCorpus, function(x) { length(content(x))}),sep = ",")` lines from 
+blogs, news and twitter. The total size of the data in memory is `r round(object.size(trainCorpus)/(1024*1024))` megabyte, so 
+the data set stays manageable.
+
+We load and read in the reference english word lists from Wordnet and SCOWL projects as well.
+
+```{r Building reference word lists,echo=FALSE, cache=T, split= F}
+if (!dir.exists(file.path(tmpdir,"before"))) {
+        dir.create(file.path(tmpdir,"before"),recursive = T)
+        dir.create(file.path(tmpdir,"after"),recursive = T)
+}
+
+if (!dir.exists(endicts)) dir.create(endicts,recursive = T)
+if (!dir.exists(scowldir))    dir.create(scowldir,recursive = T)
+
+## Check, if the project data file is here; if not, download and unpack
+
+if (!dir.exists(file.path(datadir,"final","en_US"))) {
+        setwd(datadir)
+        projectcorpFile <- file.path(datadir,projectcorpFile)
+        if (!file.exists(projectcorpFile))
+                download.file(url = projectcorpURL,destfile = projectcorpFile,mode = "wb")
+        engfiles <- grep("en_US.*txt",unzip(zipfile = projectcorpFile, list = T)[[1]],value = T)
+        unzip(zipfile = projectcorpFile, files = engfiles)
+}
+
+# Building the Wordnet dictionary
+# Wordnet requests are not performant enough for verification of the really long
+# lists over the standard R interface. We make brute force hacking of wordnet lists
+# at the UNIX-console
+
+system(paste("grep -vh '^ ' /usr/share/wordnet/index*| cut -f1 -d' '| sort -u > ",endicts,"/dict_wordnet.txt",sep=""))
+
+## We use the SCOWL english word lists as a concurrent english word list
+
+scowlgz <- file.path(scowldir,"scowl-2016.06.26.tar.gz")
+
+if (!file.exists(file.path(tmpdir,"scowl-words.txt"))) {
+        if (!file.exists(scowlgz))
+                download.file(url = "http://vorboss.dl.sourceforge.net/project/wordlist/SCOWL/2016.06.26/scowl-2016.06.26.tar.gz",
+                              destfile = scowlgz, mode = "wb")
+        untar(tarfile = scowlgz, exdir = scowldir)
+        system(paste("cat ",scowldir,"/*/final/*| sort -u > ",endicts,"/dict_scowl.txt","",sep=""))
+}
+
+dictCorp <- Corpus(DirSource(endicts, encoding = "UTF-8", pattern = ".*.txt"))
+
+trimmCombinations <- function(x) gsub("_"," ",x)
+
+## Words like more, times, where, minutes,  office or from can not be found after stemming,
+## so we could reject stemming building dictionary
+## We probably still need punctuation (the word pair/triplets bilidng might stop an
+## something like ",")
+## Order matters: tolower, than removeWords
+
+if (dictToLower) { dictCorp <- tm_map(dictCorp, content_transformer(tolower)) }
+
+dictCorp <- tm_map(dictCorp, stripWhitespace)
+
+if (dictToTrimmComb) { dictCorp <- tm_map(dictCorp, content_transformer(trimmCombinations)) }
+
+dictCorp <- tm_map(dictCorp, content_transformer(unique)) 
+words_EN <- unique(c(dictCorp[[1]]$content,dictCorp[[2]]$content))
+
+## Currently not used, time consuming
+# dictCorp <- tm_map(dictCorp, stemDocument)
+# stems_EN <- unique(c(dictCorp[[1]]$content,dictCorp[[2]]$content))
+
+rm(dictCorp)
+invisible(gc())
+
+
+## Selecting english words from the dichtionary as data table is about FORTY times faster,
+## than construct like wrds %in% words_EN
+
+dt_words_EN <- data.table(freq = rep(-1,length(words_EN)), words_EN)
+setkey(dt_words_EN, "words_EN")
+#dt_stems_EN <- data.table(stems_EN)
+#setkey(dt_stems_EN,"stems_EN")
+#rm(list=c("words_EN","stems_EN"))
+rm(list=c("words_EN"))
+invisible(gc())
+```
+
+```{r}
+## Status after downloading the dictionaries
+
+system(paste("ls -lR",datadir))
+
+``` 
+
+The next performance relevant steps to be made are removing of articles, numbers (low predictive strength) and of longer 
+non-verbal character sequences and trimming the text with respect to white spaces and punctuation marks (we leave them in). 
+Than  the words are to be filtered away, written with non-latin  characters and after it those, not found in the reference 
+word variants list (total of `r  nrow(dt_words_EN)` words and variants from british, american, canadian and other flavors 
+of English). We reject the stemming of the data set and reference word list.
+
+This is a way, *tidy data* being prepared, suitable for the regular exploration.
+
+```{r Building tidy data,echo=FALSE, cache=TRUE}
+
+wordsnogo <- c("the","a","an") 
+
+trList <- list(
+        removeNumbers,
+        stripWhitespace
+)
+
+workTrainCorpus <- tm_map(trainCorpus, tm_reduce, trList)
+
+rm(trainCorpus)
+invisible(gc())
+
+if (docsToLower) workTrainCorpus <- tm_map(workTrainCorpus, content_transformer(tolower))
+
+workTrainCorpus <- tm_map(workTrainCorpus, removeWords, wordsnogo)
+
+punctmarks <- "[,.!?]"
+vectPM <- c(".",",","!","?")
+punctmarkGroup <- "([,.!?;()])"
+
+## All printable ASCII characters
+## gsub("[\x21-\x7e]","","abZ{")
+
+treatPucntuations <- function(x) {
+        # Removing quotes of different kinds
+        # x <- gsub("(\xe2\x80\x9c|\xe2\x80\x9d|\x22)","",x)
+        
+        # Substituting punctuation characters at the end of the line with " ."
+        x <- gsub(paste(punctmarks,"{2,}[[:blank:]]*$",sep="")," .", x, perl = T)
+        
+        # Removing the longer [.,_-><] sequencies in the middle of the line
+        x <- gsub("([.,_><-]{2,})"," ", x, perl = T)
+        
+        # Transfering the "<word><punctmark>"  into "<word> <punctmark>  "
+        x <- gsub(paste("([^[:blank:]])",punctmarkGroup,sep=""),"\\1 \\2", x, perl = T)
+        # Formating the end-of-sentence (characters ".!?")
+        x <- gsub(punctmarkGroup," \\1 ", x, perl = T)
+        # Putting "." at the end of the line (if not closed by author or before)
+        x <- gsub(paste(punctmarkGroup,"[[:blank:]]*$",sep=""),"\\1 . ", x, perl = T)
+        # Trimming the excessive white spaces/tabs
+        x <- gsub("[[:blank:]]{2,}"," ", x, perl = T)
+        #Trimming the blanks et the end of line - not used as better for tokenizing
+        #x <- gsub("[[:blank:]]*$","", x, perl = T)
+        x
+}
+
+workTrainCorpus <- tm_map(workTrainCorpus, content_transformer(treatPucntuations))
+
+workTrainCorpusBak <- workTrainCorpus
+
+workTrainCorpus <- workTrainCorpusBak
+
+## Removing words not in the EN dictionary (with the characters outside the ASCII span "-" 
+## over "a-zA-Z" upto "~")
+cntinitial <- 0
+for (i  in length(workTrainCorpus)) {
+        for (l in workTrainCorpus[[i]]$content) cntinitial <- cntinitial + length(strsplit(l, split = "[[:blank:]]+")[[1]])
+}
+
+
+## It is probably mor reasonable to thorw away the whole line, containing 
+## the non-latin characters/bytes?
+
+filterNotLatinWords <- function(x) gsub("[[:blank:]]*[^[:blank:]]*[^\x20-\x7e][^[:blank:]]*", "", x)
+
+for (i in 1:length(workTrainCorpus)) {
+        workTrainCorpus[[i]]$content <- filterNotLatinWords(workTrainCorpus[[i]]$content)
+}
+
+cntlatin <- 0
+for (i  in length(workTrainCorpus)) {
+        for (l in workTrainCorpus[[i]]$content) cntlatin <- cntlatin + length(strsplit(l, split = "[[:blank:]]+")[[1]])
+}
+
+
+tidyTrainCorpus <- VCorpus(VectorSource(1:length(workTrainCorpus)))
+
+pickOnlyEnglishWrds <- function(x) {
+        rslt <- c()
+        for (lin in x)  {
+                wrds <- strsplit(lin, split = "[[:blank:]]+")[[1]]
+                mask <- wrds %in% vectPM | !is.na(dt_words_EN[wrds,]$freq)
+                y <- paste(wrds[mask], collapse = " ")
+                y <- gsub(paste("(",punctmarks,")","([[:blank:]]*\\1)*",sep="")," . ",y)
+                rslt <- c(rslt,y)
+                
+        }
+        rslt
+}
+
+for (i in 1:length(workTrainCorpus)) {
+        tidyTrainCorpus[[i]]$content <- pickOnlyEnglishWrds(workTrainCorpus[[i]]$content)
+}
+
+cnteng <- 0
+for (i  in length(workTrainCorpus)) {
+        for (l in workTrainCorpus[[i]]$content) cnteng <- cnteng + length(strsplit(l, split = "[[:blank:]]+")[[1]])
+}
+
+
+
+rm(workTrainCorpus)
+invisible(gc())
+
+```
+
+The word count in the data set changed as follows:  
+
+----------------------------------------------  
+Stage                     |   Number of words  
+----------------------------------------------  
+Raw data set              |  `r cntinitial`  
+Non-latin removed         |  `r cntlatin`  
+Verified english words    |  `r cnteng`  
+----------------------------------------------  
+
+`round(cntinitial-cntlatin)` or (`r round((cntinitial-cntlatin)/cntinitial*100,3)`%) words were 
+identified and removed as containing the non-latin characters.  
+
+
+
+----------------------------------------------------------------------------------  
+
+## Exploratory data analysis
+
+
+```{r DTM, echo = F, cache = T}
+#Creating Term-Document Matrices
+
+dtmTr <- DocumentTermMatrix(x = tidyTrainCorpus)
+#Normalizing the frequencies in the matrix
+cntIncid <- sum(sum(dtmTr))
+dtmTr <- dtmTr/cntIncid
+
+#Single word frequency, descending
+wordFreqDescNorm <- sort(colSums(as.matrix(dtmTr)), decreasing = T)
+
+```
+
+The first step in the data analysis is calculating of the frequency of unique english words. The built Document-Text Matrix reveals the 
+total of `r cntIncid` word incidences of **`r round(length(wordFreqDescNorm))` unique words**.
+
+The **Top-20 single words** by the frequency are (in descending order, frequencies in percent):
+
+```{r echo = F}
+round(wordFreqDescNorm[1:20]*100,4)
+```
+
+Here is the estimation, how many top words build ten, twenty, fifty and ninety percent quantile of all word occurrences in the 
+text corpus.
+
+```{r }
+## Twenty percent of the words/stems are only the first twenty seven in the list.
+## Less than 300 word stemms constitute the half of the word incidence
+sum(cumsum(wordFreqDescNorm) <= .1)
+sum(cumsum(wordFreqDescNorm) <= .2)
+sum(cumsum(wordFreqDescNorm) <= .5)
+sum(cumsum(wordFreqDescNorm) <= .9)
+```
+
+
+**The pool, building the half of the text body, is only few hundred words**.  
+
+
+Plotting the frequencies of the Top-300 words reveals the fast decrease up to rank about 50, at lower level the 
+decline becomes much slower.
+
+```{r  echo =F}
+plot(x = 1:300, y = wordFreqDescNorm[1:300]*100, type = "s",main = "Frequencies of the top-300 english words", 
+     xlab = "Index of word by frequency (decreasing)", ylab = "Frequency,%", lwd = 2, col = "blue", frame.plot = T)
+```
+
+
+## Clustering by Term Similarity
+
+
+### Hierarchal Clustering
+
+Hierarchical clustering is a method of cluster analysis which seeks to build a hierarchy of clusters.  
+
+To keep the plot manageable, we take only the Top-50 words by frequency in the cluster.
+```{r echo=F}
+## Filtering out the sparse words 
+
+dtmTr <- removeSparseTerms(dtmTr, sparse = .34)
+dtmTr50 <- dtmTr[,(colnames(dtmTr) %in% names(wordFreqDescNorm[1:50]))]
+
+dtmTr50 <- dtmTr[,(colnames(dtmTr) %in% names(wordFreqDescNorm[1:50]))]
+d <- dist(t(dtmTr50), method="euclidian")   
+fit <- hclust(d=d, method="ward.D2")   
+plot(fit, hang=-1, main = "Hierarchical word cluster (Top-50 words)", xlab = "Words", ylab = "", frame.plot = T,ann = F)
+groups <- cutree(fit, k=5)
+rect.hclust(fit, k=5, border="red")
+```
+
+The ward "and" stays away from other popular words, showing less binding to the rest. The words from the Top-20 build 
+own clusters. 
+
+
+## K-means clustering
+
+K-means clustering aims to partition n observations into k clusters in which each observation belongs to the cluster 
+with the nearest mean, serving as a prototype of the cluster. The plot let us take a look at the same word pool, showing 
+one more time the detachment of the word "and" and else essentially the same grouping.
+
+```{r echo=F}
+library(fpc)   
+d <- dist(t(dtmTr50), method="euclidian")   
+kfit <- kmeans(d, 5)   
+clusplot(as.matrix(d), kfit$cluster, color=T, shade=T, labels=2, lines=0, main="K-means clustering of Top-50 words")  
+
+rm(dtmTr)
+invisible(gc())
+```
+
+
+
+## Word clouds
+
+To complete the mandatory program and have sum fun (sorry, *some* - I probably have had too much statistics ;-) , I've plotted 
+the wordcloud of for Top-500 words.
+
+```{r echo=F}
+set.seed(142)   
+wordcloud(names(wordFreqDescNorm), wordFreqDescNorm, max.words = 500, scale=c(7, .2), colors=brewer.pal(6, "Dark2"), 
+          main = "Wordcloud Top-100" )
+```
+
+It is nothing essentially new here, but the plot of the *word universe* is really pleasant!
+
+
+## Frequencies of the word pairs (bigrams)
+
+Having seen the illustrations of the existent word associations, we should now come back to the more prosaic figures. 
+The frequencies of all the word pairs occurring in the text corpus have been calculated and ranked. I took the punctuation 
+marks for a "natural boundaries" building pairs, so that the last word before period or comma came as a second into the pair with the last 
+but one, but not as a first in the next pair with the word after the punctuation mark. After the mark the count began from scratch, 
+The same principle were applied to tri- and four-grams. Logically, this principle should weigh for the future prediction.
+
+```{r echo = F, cache = T}
+## Library tau
+
+bigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content, 
+                     tidyTrainCorpus[[3]]$content), method = "string", split = " ", n = 2L)
+bigrams <- unclass(bigrams)
+
+#Selecting only the wordpairs without separators and "'"
+mask <- grepl(punctmarks,names(bigrams))
+bigrams <- bigrams[!mask]
+mask <- grepl("['*+]",names(bigrams))
+bigrams <- bigrams[!mask]
+bigrams <- sort(bigrams, decreasing = T)
+
+rm(mask)
+invisible(gc())
+```
+
+**The total number of bigrams is `r length(bigrams)`**.  The number is really big. Fortunately for living speakers and 
+the future prediction engine, it is still much less, than the number of possible permutations of all detected words 
+(`r length(wordFreqDescNorm)*(length(wordFreqDescNorm)-1)`)!  Statistically proven, a language is not a simply word mess.
+The top-20 two-word-combinations are (absolute numbers here):
+
+```{r Bigrams, echo=F, comment=''}
+for (i in 1:20) print(paste(names(bigrams[i]),bigrams[i],sep = " - "))
+```
+
+The list looks (and much longer downwards!) like a page from the beginner's textbook in English and it suggests like no surprises are here. 
+But we pack it carefully in the separate *R data.table* as the first building block for the future prediction model.
+
+
+## Frequencies of the word triplets (trigrams)
+
+
+
+```{r echo = F, cache = T}
+## The same for word triplets
+
+trigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content, 
+                      tidyTrainCorpus[[3]]$content), method = "string", split = " ", n = 3L)
+trigrams <- unclass(trigrams)
+
+#Selecting only the wordpairs without separators and "'"
+mask <- grepl(punctmarks,names(trigrams))
+trigrams <- trigrams[!mask]
+mask <- grepl("['*+]",names(trigrams))
+trigrams <- trigrams[!mask]
+trigrams <- sort(trigrams, decreasing = T)
+
+rm(mask)
+invisible(gc())
+```
+
+Analysis has revealed **`r length(trigrams)` unique word triplets**.  
+One more time, no real surprises under the top-20 and long downwards:
+
+```{r echo=F}
+for (i in 1:20) print(paste(names(trigrams[i]),trigrams[i],sep = " - "))
+```
+
+And again, we'll pack the long list in a data table for future utilization in the model.
+
+## Four-grams
+
+```{r echo=F}
+## The same for four words
+
+four_grams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content, 
+                        tidyTrainCorpus[[3]]$content), method = "string", split = " ", n = 4L)
+four_grams <- unclass(four_grams)
+
+#Selecting only the wordpairs without separators and "'"
+mask <- grepl(paste("(",punctmarks,"|['*+])",sep=""),names(four_grams))
+four_grams <- four_grams[!mask]
+four_grams <- sort(four_grams, decreasing = T)
+
+rm(mask)
+invisible(gc())
+
+rm(tidyTrainCorpus)
+invisible(gc())
+```
+
+**Total number of unique four-grams `r length(four_grams)`**
+
+Top-20 four-grams:  
+
+```{r Top-20 four-grams, echo=F}
+for (i in 1:20) print(paste(names(four_grams[i]),four_grams[i],sep = " - "))
+```
+
+At this place we have at last a surprise of some kind. The number of the unique word combinations grows from three to four 
+words only minuscule (from `r length(trigrams)` to  `r length(four_grams)`) compared to the possible permutations for both 
+cases. It reflects probably the real spectrum of the *senses*, the people express with the *phrases* or *expressions*. At that 
+point we may assume the triplets of words being reasonable predictors for the future model.
+
+## Comparative statistical perfrormance of n-grams
+
+Taking the full n-gram for the "outcome", we can define the n-gram without a last word as "predictor" 
+(e.g. "go to" is a predictor for "go to bed"). Using this approach we try to explore the potential 
+statistical performance of predictors of the length 1, 2 and 3 (bi-, tri- and four-grams used as source 
+for predictors and outcome respectively).  
+
+Taken the known ranked frequencies of n-grams, we could try build the prediction model at this basis.  Loving extremes, we take 
+the worst case - the most versatile predictors (by the number of related outcomes).
+
+Here are some examples of such  predictors, they are on the top by the overall incidence as well. A real hardship case for practical 
+prediction!
+
+```
+to be       it was      will be        it is       i have        i was     has been    have been         i am       out of
+```
+
+The following plot is built averaging data for fifty most "multipotent" predictors (i.e., related to the more n-grams 
+than the others). For each of the predictors the ranked array of frequencies of the "parents" has been selected and then mixed.
+At this basis some kind of "saturation curve" was plotted, reflecting how many tries we need to reach the given coverage 
+level for summarized frequency of related outcomes.
+
+
+```{r Comparative statistical perfrormance of n-grams, echo=F}
+# The following plots were build along with this algorithm:
+# - Taking the fifty top ranked n-grams (e.g. trigrams) with respective frequencies.
+# - Extracting first two words of each trigram as predictor (each predictor has one or more trigrams as "parents" or vice versa).
+# - Ranking predictors by the number of occurencies in different trigrams (formal variability).
+# - Defining the top-50 predictors by the formal varability.
+# - Extracting an array of the decreasing trigram frequencies for "parents" of each predictor(in a common table).
+# - Summarizing the arrays for all predictors (column binding) in a new array.
+# - Building an array with cumulated sums from the just summarized array.
+# - Ploting the cumulated array.
+
+par(mfrow = c(1,1))
+plot_predictor_performance <- function(ngramms) {
+        clrs <- c("blue","red", "green")
+        ngr_names <- c("monograms","bigrams","trigrams","four-grams")
+        j <- 1
+        #Taking the fifty top ranked n-grams
+        for (ngr in ngramms) {
+                
+                predictors <- ngr
+                #Extracting first two words of each trigram as predictor
+                names(predictors) <- gsub(" [^ ]+$","",names(predictors))
+                #Ranking predictors by the number of occurencies in different trigrams (formal variability)
+                top50predictors <- sort(table(names(predictors)),decreasing = T)[1:50]
+                maxx <- max(top50predictors)
+                cummtrx <- matrix(0, nrow = maxx, ncol = 50)
+                cnt <- 1
+                for (pred in names(top50predictors)) {
+                        
+                        pred <- paste("^",pred,"$",sep = "", collapse = "")
+                        mask <- grepl(pred, names(predictors))
+                        pred_frq <- predictors[mask]
+                        rm(mask)
+                        #Cumulating the trigram frequencies for "parents" of each predictor
+                        cummtrx[,cnt] <- c(pred_frq, rep(x = 0, times = maxx - length(pred_frq)))
+                        cnt <- cnt + 1
+                }
+                colnames(cummtrx) <- gsub(" [^ ]+$","",names(top50predictors))
+                clr <- clrs[j]
+                rS <- rowSums(cummtrx)
+                cS <- cumsum(rS)
+                fullsum <- sum(rS)
+                plot(x = 1:maxx, y = cS, col = clr , type = 'l', 
+                     main = paste("Predicting for Top-50",ngr_names[j+1]),
+                     sub = paste("First",sub("s$","",ngr_names[j]),"as predictor"),
+                     xlab = paste("Avg. ranking over the top-50 ",ngr_names[j]),
+                     ylab = paste("Total nr. of observations"), log = "x")
+                abline(a = fullsum*.5, b = 0, lty = "dashed", lwd = .5)
+                abline(a = fullsum*.95, b = 0, lty = "dashed", lwd = .5)
+                thrshld <- max(cumsum(rS)[cumsum(rS)/sum(rS) <= .95])
+                thrshld <- which(cS == thrshld)
+                abline(v = thrshld, b = 1, lty = "dashed", lwd = .5)
+                thrshld <- max(cumsum(rS)[cumsum(rS)/sum(rS) <= .5])
+                thrshld <- which(cS == thrshld)
+                abline(v = thrshld, b = 1, lty = "dashed", lwd = .5)
+                j <- j + 1
+        }
+}
+
+plot_predictor_performance(list(bigrams, trigrams, four_grams))
+
+```
+
+Comparing the plots for bi-, tri- and four-grams as outcomes/parents (predictors of length 1, 2 or 3) we can see, that 50% 
+coverage:  
+- with a one-word-predictor needs on average 100 ranked variants to be probed
+- with predictor of two words needs only 50 tries
+- the same with three words is finished in twenty 20 steps
+
+The difference for 90% quantile is much more strong.
+
+So, the longer predictors have better predictive performance (at least for one, two and three words).
+
+
+----------------------------------------------------------------------------------  
+
+# Concetps and algorithms for prediction model.
+
+The most simple prediction model at this point is using of the calculated and raked n-grams frequencies for generation 
+of the suggestions for the next word. There are some practical questions to be answered building the feasible practical 
+solution.
+
+
+1. We will give the ranked by frequency lists of bi-, tri- and four-grams a trial as prediction mechanism.
+2. All the technical routines for selection of the lists are as described above.
+2. We will probably need not only the in-line-prediction (word by word), but the in-word-prediction as well (predicting 
+the ending of the word being just typed).
+2. We need some fallback mechanisms for missing predictors in database, typos and so on.
+1. The controversy between bias and variance of statistical model is ubiquitous. In our case we have data with 
+a maximal variance. It is a vivid mapping of the test data set, but probably some to vivid. That should be kept in 
+mind for advanced modeling.
+2. The next omnipresent controversy is that between the statistical performance of the model and hardware performance.
+3. For the sake of technical performance (execution times meant) I have packed the word lists into indexed data tables, 
+each for a kind of n-grams.
+3. The other facet of technical performance is memory consumption of the databases. It is definitely the matter for further 
+research. 
+3. It is not only the capacity of hardware, limiting the depth of the prediction, but the willingness of the end user to scroll 
+through the suggestion lists. Already at this stage, it makes no sense to plan delivering all `r max(bigrams)` variants for the 
+expression `r names(bigrams)[1]` to the user.
+4. The limitations put by hardware and user interfaces of the gadgets like smartphone reinforce the considerations above.
+5. We need for development much enough ressources, to produce  the parsimonious, performant and efficient end product. 
+
+
+----------------------------------------------------------------------------------  
+
+# Quick and plain prototype of prediction engine
+
+The questions posed above are to intriguing to wait with the answers. Experiences gathered in the former stage oblige.
+
+Here is a demonstration of the prediction engine prototype as built in a short time.  
+
+- The order of evaluation of predictor against database is sequence of 3, then 2 and 1 words.
+- The lower limit for in-word completion set at 3 characters.
+- The upper limit for the number of suggestions set at 30 words.
+- As a fallback for predictor missed in the database is used a derivate, shortened by one word at front 
+("nice moonlight evening" -> "moonlight evening"). The procedure is iterated repeated when needed.
+- The in-word prediction works with the same list, allowing the completion of the short chunks.
+- If the char sequence can not be found in the word list, it is iterative shortened and compared against the 
+database.
+- The last resort is suggesting the top-30 words form the common list.
+- Right after the punctuation marks come no suggestions, the play begins from scratch with the first word.
+- The incredible performance of the indexed data tables and dplyr package are extensively used.
+
+
+```{r echo=F}
+## Possible savings throufh limiting of the redundance of the predictors to max. top 30
+
+limit <- 30
+
+## In-word prediction db
+
+dt_inWord <- data.table(wordFreqDescNorm, names(wordFreqDescNorm))
+
+## Evaluating the possible memory savings through the limit of 30 words per predictor
+## Maximal about 12% for the anyway smaller bigrams.
+
+## Bigrams
+# tb <- table(gsub(" [^ ]*$","",names(bigrams)))
+# mask <- tb <= 30
+# sum(!mask)/length(mask)
+# rm(mask)
+# 
+# ## Trigrams
+# tb <- table(gsub(" [^ ]*$","",names(trigrams)))
+# mask <- tb <= 30
+# sum(!mask)/length(mask)
+# rm(mask)
+# 
+# ## Four-grams
+# tb <- table(gsub(" [^ ]*$","",names(four_grams)))
+# mask <- tb <= 30
+# sum(!mask)/length(mask)
+
+invisible(gc())
+
+
+dt_bigrams <- data.table(freq = bigrams, 
+                         predictor = gsub(" [^ ]*$","",names(bigrams)), 
+                         outcome = gsub("^.* ","",names(bigrams))
+)
+setkey(dt_bigrams,predictor)
+
+rm(bigrams)
+invisible(gc())
+
+dt_trigrams <- data.table(freq = trigrams, 
+                          predictor = gsub(" [^ ]*$","",names(trigrams)), 
+                          outcome = gsub("^.* ","",names(trigrams))
+)
+setkey(dt_trigrams,predictor)
+
+rm(trigrams)
+invisible(gc())
+
+dt_four_grams <- data.table(freq = four_grams, 
+                            predictor = gsub(" [^ ]*$","",names(four_grams)), 
+                            outcome = gsub("^.* ","",names(four_grams))
+)
+
+rm(four_grams)
+invisible(gc())
+
+setkey(dt_four_grams,predictor)
+
+## Postponed as possible memory consumption optimizer
+# ## Frequency of bigram predictors in the trigrams
+# tb <- table(gsub(" [^ ]*$","",names(trigrams)))
+# 
+# mask <- tb > limit
+# trimmed_trigramms <- trigrams[!mask]
+# 
+# for (pred in names(tb[mask])) {
+#         print(pred)
+#         #Using vector
+#         #mask <- grepl(paste("^",pred,sep = ""), names(trigrams))
+#        # trimmed_trigramms <-  c(trimmed_trigramms,trigrams[mask][1:limit])
+#         # Using data table
+#         trimmed_trigramms <-  c(trimmed_trigramms,dt_trigrams[pred,][1:limit])
+# }
+# dt_trigrams <- data.table(freq = trigrams, 
+# predictor = gsub(" [^ ]*$","",names(trigrams)), 
+# outcome = gsub("^.* ","",names(trigrams))
+# )
+# setkey(dt_trigrams,predictor)
+# and so on...
+
+## Reorganize the dt_words_EN
+
+used_words <- sort(wordFreqDescNorm[dt_words_EN[names(wordFreqDescNorm),]$words_EN], decreasing = T)
+rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
+
+#rm(wordFreqDescNorm)
+#invisible(gc())
+
+dummies <- rep(0,length(rest_words))
+
+
+#rm(dummies, used_words)
+#invisible(gc())
+
+dt_words_EN <- data.table(freq = c(used_words), words_EN = c(names(used_words),names(rest_words)))
+setkey(dt_words_EN, words_EN)
+
+
+#rm(all_words)
+#invisible(gc())
+
+limit <- 30
+wlimit <- 3
+
+predictEngine <- function(xpr) {
+        
+        xprOrig <- xpr # preserving the original search expression
+        
+        rtrn <- data.frame() #as default an empty data frame (nothing found)
+        if (Encoding(xpr) == "unknown") {  #we don't deal with the foreign and mixed inputs
+                
+                askDB <- function(xpr) {
+                        ### Conditioning predictor expression
+                        
+                        #Trimming all blanks : "  aaa   bbb    ccc       " -> " aa bb cc "
+                        xpr <- gsub("[[:blank:]]+"," ", xpr) # "red        grape" -> "red grape"
+                        # Removing blanks at front and back
+                        xpr <- gsub("(^[[:blank:]]+|[[:blank:]]+$)","", xpr) # "  red grape    " -> "red grape"
+                        # Trimming to  the last punctuation mark : "red ., grape" -> "grape"
+                        #we begin from scratch after the punctuation characters like .,?!
+                        xpr <- sub(paste("^.*",punctmarks,"([[:blank:]]+|$)", sep=""),"",xpr)
+                        lgth <- stri_count(xpr, fixed = " ")+1
+                        
+                        if(stri_length(xpr) > 0) {
+                                if (lgth == 1) rtrn <- na.omit(dt_bigrams[xpr,][1:limit])
+                                if (lgth == 2) rtrn <- na.omit(dt_trigrams[xpr,][1:limit])
+                                if (lgth == 3) rtrn <- na.omit(dt_four_grams[xpr,][1:limit])
+                        } else { 
+                                rtrn <- inWordPredictEngine(xpr) 
+                        }
+                        rtrn
+                }
+                
+                rtrn <- askDB(xpr)
+                
+                if (xpr == "") {
+                        rtrn <- inWordPredictEngine(xpr)
+                } else {
+                        ## Nothing exact found in the database :((
+                        if (nrow(rtrn) == 0 ) { 
+                                
+                                xpr <- xprOrig
+                                lgthOrig <- stri_count(xprOrig, fixed = " ")+1
+                                
+                                # Trying to reduce the ONLY the last word of preidctor to the reasonabe( (?): "aa bb ccc" -> "aa bb cc" -> "aa bb c"
+                                xpr <- gsub(".$","",xpr)
+                                lgth <- stri_count(xpr, fixed = " ")+1
+                                
+                                # Condition Original number of words &&  more than one word (see in-word-prediction)
+                                while (lgth > 1 && lgth == lgthOrig && nrow(rtrn) == 0) {
+                                        xpr <-gsub(".$","",xpr)
+                                        rtrn <- askDB(xpr)
+                                        lgth <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                                } 
+                                rm(xpr)
+                                
+                        }
+                        
+                        ## Still nothing after shortening the last one.
+                        ## Fallback from n-gram to (n-1)-gram like - "aa bb cc" -> "bb cc"
+                        ## Original predictor value!
+                        
+                        if (nrow(rtrn) == 0) {
+                                
+                                xpr <- xprOrig #beginnig from scratch
+                                
+                                lgth <- stri_count(xpr, fixed = " ", case_insensitive = T)+1
+                                
+                                ## 
+                                while (nrow(rtrn) == 0 && lgth > 1) {
+                                        #remove the first word from expression : "aa bb cc" -> "bb cc"
+                                        xpr <- sub("^[[:blank:]]*[^[:blank:]]+[[:blank:]]*", "", xpr)
+                                        lgth <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                                        if (lgth > 1) {
+                                                rtrn <- askDB(xpr)
+                                        } else { 
+                                                ## Last word standing, still no result...
+                                                rtrn <- inWordPredictEngine(xpr)
+                                        }
+                                } 
+                                
+                                
+                        } 
+                }
+                rtrn
+        } else { rtrn } # No prediction for chinese, russian, hebrew and the rest strange languages!
+}
+
+inWordPredictEngine <- function(xpr) {
+        
+        xprOrig <- xpr
+        rtrn = data.frame()
+        if (stri_length(xpr) > 0) {
+                ## Use case #1 - a word is in process of typing - so to short, we could probably recognize it by the stem
+                rtrn <- dt_words_EN %>% filter(words_EN %like% paste("^",xpr, sep = ""))
+                
+                ## Use case #2 - the word is probably too long. Reducing in steps up to length wlimit 
+                if (nrow(rtrn) == 0) {
+                        while(stri_length(xpr) >= wlimit && nrow(rtrn) == 0) {
+                                xpr <- gsub(".$","",xpr)
+                                xpr
+                                rtrn <- na.omit(dt_words_EN[xpr,])
+                                rtrn
+                        }
+                        
+                        # Absolutely nothing found  -> simply give the list of the most top-[limit]
+                        if (nrow(rtrn) == 0){
+                                rtrn <- head(arrange(dt_words_EN, desc(freq)),limit) # Yes, we can! Even, if these are the trivials.
+                        }
+                }
+        }
+        else {
+                rtrn <- head(arrange(dt_words_EN, desc(freq)),limit) # Yes, we can! Even, if these are the trivials.
+        }
+        rtrn
+}
+
+```
+
+## Short engine tests
+
+```{r Testing the prediciton prototype, echo=T, collapse = T}
+## We are probably not perfect yet ;-)
+
+#Normal case
+system.time(rslt <- predictEngine("red"))
+head(rslt)
+#Normal case
+system.time(rslt <- predictEngine("red river"))
+head(rslt)
+# Normal case, predictor not found - shortening the second word
+system.time(rslt <- predictEngine("red readd"))
+head(rslt)
+# Control for the second part
+system.time(rslt <- predictEngine("readdd"))
+head(rslt)
+# Predictor ends with punctuation char - nothing to be returned
+system.time(rslt <- predictEngine("red river ,"))
+head(rslt)
+
+# After foreign words not suggestions delivered
+system.time(rslt <- predictEngine("red уменьшению"))
+head(rslt)
+```
+
+----------------------------------------------------------------------------------  
+
+# Conclusion
+
+- We have succesfully downloaded and performed an exploration data analysis of the english recommenden text corpus.  
+- The resulsts of the analysis let us build a plain, but performant prediction algorithm.  
+- The insights, algorithm and prototype of prediction engine are a very good basis for further technically perfromant and 
+parsimonious development.
+
