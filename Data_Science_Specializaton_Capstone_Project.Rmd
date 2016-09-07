@@ -52,6 +52,7 @@ result_file <- file.path(tmpdir,"results.log")
 ```
 
 ------------------------------------------------------  
+
 # Introduction
 
 This report presents basic approach and results of the exploratory data analysis of the text corpus from  english 
@@ -63,6 +64,8 @@ The report is generated with R/knitr, the most of the shown data are calculated 
 On the other hand, the report may be used for marketing purposes, so it should be understandable to a *non-data scientist* manager. 
 Consequently, the main part of source code is hidden in the text. 
 
+------------------------------------------------------  
+
 # Definition of goals
 
 The goals of the milestone project are to apply and demonstrate the following abilities:
@@ -71,7 +74,7 @@ The goals of the milestone project are to apply and demonstrate the following ab
 - Applying of the tools in the area of natural language processing and text mining.
 - Exploratory analysis of the data.
 - Formulating of the technical terms and prototyping the first and plain prediction algorithm.
-- Using the elaborateed insights and iterating the think-try-think cycle we can subsequently 
+- Using the elaborated insights and iterating the think-try-think cycle we can subsequently 
 develop more sophisticated concepts and models.
 
 ----------------------------------------------------------------------------------  
@@ -88,7 +91,7 @@ data set. As a reference english word lists were used the data from
 
 # Initial expectations and assumptions
 
-- The word set of the text corpus is expected to mainly correspond to the standard english one.
+- The word set of the text corpus is expected to mainly correspond to the standard English.
 - Trivial english words and expressions are expected to be on the top by the frequency.
 - Typos and conscious mutilations are usual in Internet language.
 - Written expressive language of the news might differ from that of blogs or Twitter, the possible differences will be not 
@@ -103,7 +106,7 @@ than this one.
 
 Downloading, processing and exploration analysis of the data were performed using tools of [R](https://www.r-project.org/), 
 a free software environment for statistical computing and graphics.  
-Aiming a non-data scientist manager with this report, all used processing and configuration routines and  stay 
+Aiming a non-data scientist manager with this report, all used processing and configuration routines stay 
 under the hood, being still available  for technical experts as 
 [source code at GitHub](https://github.com/DDakhno/CapstoneProject).
 
@@ -111,15 +114,15 @@ under the hood, being still available  for technical experts as
 
 # Data loading
 
-Data loading and unpacking is performed hidden using R function *utils::download.file* and *utils:unzip* . 
+Data loading and unpacking is performed in the background using R function *utils::download.file* and *utils:unzip* . 
 
 Here only the proofs of the work done:
 
 ```{r}
 ## Status before downloading
-
-system(paste("ls -lR",datadir))
-
+dir(datadir)
+dir(file.path(datadir,"final","en_EN"))
+dir(file.path(datadir,"en_dicts"))
 ```
 
 ```{r echo = F}
@@ -147,8 +150,9 @@ if (!dir.exists(file.path(datadir,"final","en_US"))) {
 
 ```{r}
 ## Status after downloading and unpacking the text corpus
-
-system(paste("ls -lR",datadir))
+dir(datadir)
+dir(file.path(datadir,"final","en_US"))
+dir(file.path(datadir,"en_dicts"))
 ```
 ----------------------------------------------------------------------------------  
 
@@ -291,9 +295,9 @@ invisible(gc())
 
 ```{r}
 ## Status after downloading the dictionaries
-
-system(paste("ls -lR",datadir))
-
+dir(datadir)
+dir(file.path(datadir,"final","en_US"))
+dir(file.path(datadir,"en_dicts"))
 ``` 
 
 The next performance relevant steps to be made are removing of articles, numbers (low predictive strength) and of longer 
@@ -412,17 +416,8 @@ invisible(gc())
 
 ```
 
-The word count in the data set changed as follows:  
 
-----------------------------------------------  
-Stage                     |   Number of words  
-----------------------------------------------  
-Raw data set              |  `r cntinitial`  
-Non-latin removed         |  `r cntlatin`  
-Verified english words    |  `r cnteng`  
-----------------------------------------------  
-
-`round(cntinitial-cntlatin)` or (`r round((cntinitial-cntlatin)/cntinitial*100,3)`%) words were 
+`r round(cntinitial-cntlatin)` or (`r round((cntinitial-cntlatin)/cntinitial*100,3)`%) words were 
 identified and removed as containing the non-latin characters.  
 
 
@@ -446,7 +441,7 @@ wordFreqDescNorm <- sort(colSums(as.matrix(dtmTr)), decreasing = T)
 ```
 
 The first step in the data analysis is calculating of the frequency of unique english words. The built Document-Text Matrix reveals the 
-total of `r cntIncid` word incidences of **`r round(length(wordFreqDescNorm))` unique words**.
+total of **`r cntIncid` word incidences** of **`r round(length(wordFreqDescNorm))` unique words**.
 
 The **Top-20 single words** by the frequency are (in descending order, frequencies in percent):
 
@@ -459,7 +454,7 @@ text corpus.
 
 ```{r }
 ## Twenty percent of the words/stems are only the first twenty seven in the list.
-## Less than 300 word stemms constitute the half of the word incidence
+## Less than 400 words constitute the half of the text corpus
 sum(cumsum(wordFreqDescNorm) <= .1)
 sum(cumsum(wordFreqDescNorm) <= .2)
 sum(cumsum(wordFreqDescNorm) <= .5)
@@ -501,7 +496,7 @@ groups <- cutree(fit, k=5)
 rect.hclust(fit, k=5, border="red")
 ```
 
-The ward "and" stays away from other popular words, showing less binding to the rest. The words from the Top-20 build 
+The word "and" keeps distance from the other popular words, showing less binding to the rest of the pool. The words from the Top-20 build 
 own clusters. 
 
 
@@ -565,8 +560,8 @@ invisible(gc())
 
 **The total number of bigrams is `r length(bigrams)`**.  The number is really big. Fortunately for living speakers and 
 the future prediction engine, it is still much less, than the number of possible permutations of all detected words 
-(`r length(wordFreqDescNorm)*(length(wordFreqDescNorm)-1)`)!  Statistically proven, a language is not a simply word mess.
-The top-20 two-word-combinations are (absolute numbers here):
+(`r length(wordFreqDescNorm)*(length(wordFreqDescNorm)-1)`)!  Statistically proven, English is not a simply word mess.  
+The top-20 bigrams are (absolute numbers here):
 
 ```{r Bigrams, echo=F, comment=''}
 for (i in 1:20) print(paste(names(bigrams[i]),bigrams[i],sep = " - "))
@@ -636,19 +631,19 @@ Top-20 four-grams:
 for (i in 1:20) print(paste(names(four_grams[i]),four_grams[i],sep = " - "))
 ```
 
-At this place we have at last a surprise of some kind. The number of the unique word combinations grows from three to four 
-words only minuscule (from `r length(trigrams)` to  `r length(four_grams)`) compared to the possible permutations for both 
-cases. It reflects probably the real spectrum of the *senses*, the people express with the *phrases* or *expressions*. At that 
-point we may assume the triplets of words being reasonable predictors for the future model.
+At this place we have at last a surprise of some kind. The number of the unique word combinations changes from three to four 
+words no more (from `r length(trigrams)` to  `r length(four_grams)`) as compared to the possible permutations for both 
+cases. It reflects probably the real spectrum of the *senses*, the people express with the *phrases* or *expressions*. **At that 
+point we may assume the triplets of words being reasonable predictors for the future model**.
 
 ## Comparative statistical perfrormance of n-grams
 
 Taking the full n-gram for the "outcome", we can define the n-gram without a last word as "predictor" 
-(e.g. "go to" is a predictor for "go to bed"). Using this approach we try to explore the potential 
+(e.g. "go to" is a predictor for "go to bed"). Using this approach we try to explore a potential 
 statistical performance of predictors of the length 1, 2 and 3 (bi-, tri- and four-grams used as source 
 for predictors and outcome respectively).  
 
-Taken the known ranked frequencies of n-grams, we could try build the prediction model at this basis.  Loving extremes, we take 
+Having produced the ranked frequencies of n-grams, we could try to build the prediction model at this basis.  Loving extremes, we take 
 the worst case - the most versatile predictors (by the number of related outcomes).
 
 Here are some examples of such  predictors, they are on the top by the overall incidence as well. A real hardship case for practical 
@@ -660,8 +655,8 @@ to be       it was      will be        it is       i have        i was     has b
 
 The following plot is built averaging data for fifty most "multipotent" predictors (i.e., related to the more n-grams 
 than the others). For each of the predictors the ranked array of frequencies of the "parents" has been selected and then mixed.
-At this basis some kind of "saturation curve" was plotted, reflecting how many tries we need to reach the given coverage 
-level for summarized frequency of related outcomes.
+At this basis some kind of "saturation curve" was plotted, reflecting how many tries with the top predictors we would need to reach the 
+given coverage level for summarized frequency of related outcomes.
 
 
 ```{r Comparative statistical perfrormance of n-grams, echo=F}
@@ -729,13 +724,13 @@ plot_predictor_performance(list(bigrams, trigrams, four_grams))
 
 Comparing the plots for bi-, tri- and four-grams as outcomes/parents (predictors of length 1, 2 or 3) we can see, that 50% 
 coverage:  
-- with a one-word-predictor needs on average 100 ranked variants to be probed
-- with predictor of two words needs only 50 tries
-- the same with three words is finished in twenty 20 steps
+- with a one-word-predictor needs on average 100 ranked variants to be probed  
+- with predictor of two words only 50 tries needed  
+- the same with three words is finished in twenty 20 steps  
 
 The difference for 90% quantile is much more strong.
 
-So, the longer predictors have better predictive performance (at least for one, two and three words).
+So, *the longer predictors have better predictive performance* (at least for one, two and three words).
 
 
 ----------------------------------------------------------------------------------  
@@ -748,23 +743,24 @@ solution.
 
 
 1. We will give the ranked by frequency lists of bi-, tri- and four-grams a trial as prediction mechanism.
-2. All the technical routines for selection of the lists are as described above.
+2. All the technical routines for selection of the lists are as described in the source code (hidden) above.
 2. We will probably need not only the in-line-prediction (word by word), but the in-word-prediction as well (predicting 
 the ending of the word being just typed).
 2. We need some fallback mechanisms for missing predictors in database, typos and so on.
 1. The controversy between bias and variance of statistical model is ubiquitous. In our case we have data with 
 a maximal variance. It is a vivid mapping of the test data set, but probably some to vivid. That should be kept in 
 mind for advanced modeling.
-2. The next omnipresent controversy is that between the statistical performance of the model and hardware performance.
+2. The next omnipresent controversy is that between the statistical performance of the model and hardware performance of 
+implementation.
 3. For the sake of technical performance (execution times meant) I have packed the word lists into indexed data tables, 
 each for a kind of n-grams.
 3. The other facet of technical performance is memory consumption of the databases. It is definitely the matter for further 
 research. 
 3. It is not only the capacity of hardware, limiting the depth of the prediction, but the willingness of the end user to scroll 
-through the suggestion lists. Already at this stage, it makes no sense to plan delivering all `r max(bigrams)` variants for the 
-expression `r names(bigrams)[1]` to the user.
+through the suggestion lists. Already at this stage it makes no sense to plan delivering all `r max(bigrams)` variants for the 
+predicthor "`r names(bigrams)[1]`" to the end user.
 4. The limitations put by hardware and user interfaces of the gadgets like smartphone reinforce the considerations above.
-5. We need for development much enough ressources, to produce  the parsimonious, performant and efficient end product. 
+5. We need for development much enough resources, to produce  the parsimonious and efficient end product. 
 
 
 ----------------------------------------------------------------------------------  
@@ -786,12 +782,10 @@ database.
 - The last resort is suggesting the top-30 words form the common list.
 - Right after the punctuation marks come no suggestions, the play begins from scratch with the first word.
 - The incredible performance of the indexed data tables and dplyr package are extensively used.
+- Actual output of the engine includes the data like frequency, the predictor and suggestion (last column).
 
 
 ```{r echo=F}
-## Possible savings throufh limiting of the redundance of the predictors to max. top 30
-
-limit <- 30
 
 ## In-word prediction db
 
@@ -891,6 +885,8 @@ setkey(dt_words_EN, words_EN)
 #rm(all_words)
 #invisible(gc())
 
+## Possible savings throufh limiting of the redundance of the predictors to max. top 30
+
 limit <- 30
 wlimit <- 3
 
@@ -899,7 +895,9 @@ predictEngine <- function(xpr) {
         xprOrig <- xpr # preserving the original search expression
         
         rtrn <- data.frame() #as default an empty data frame (nothing found)
-        if (Encoding(xpr) == "unknown") {  #we don't deal with the foreign and mixed inputs
+        
+        #we don't deal with the foreign and mixed inputs
+        if (Encoding(xpr) == "unknown") {  
                 
                 askDB <- function(xpr) {
                         ### Conditioning predictor expression
@@ -975,7 +973,7 @@ predictEngine <- function(xpr) {
                         } 
                 }
                 rtrn
-        } else { rtrn } # No prediction for chinese, russian, hebrew and the rest strange languages!
+        } else { rtrn } # No prediction for chinese, russian, hebrew and the rest of strange languages!
 }
 
 inWordPredictEngine <- function(xpr) {
@@ -1039,8 +1037,8 @@ head(rslt)
 
 # Conclusion
 
-- We have succesfully downloaded and performed an exploration data analysis of the english recommenden text corpus.  
-- The resulsts of the analysis let us build a plain, but performant prediction algorithm.  
-- The insights, algorithm and prototype of prediction engine are a very good basis for further technically perfromant and 
-parsimonious development.
+- We have successfully downloaded and performed an exploration data analysis of the english recommended text corpus.  
+- The results of the analysis let us build a plain, but well performing prediction algorithm.  
+- The insights, algorithm and prototype of prediction engine are a very good basis for further technically efficient and 
+parsimonious development product.
 
