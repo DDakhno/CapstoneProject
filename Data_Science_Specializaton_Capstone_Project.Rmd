@@ -118,7 +118,7 @@ Data loading and unpacking is performed in the background using R function *util
 
 Here only the proofs of the work done:
 
-```{r}
+```{r echo=T, comment='', collapse=T }
 ## Status before downloading
 dir(datadir)
 dir(file.path(datadir,"final","en_EN"))
@@ -148,7 +148,7 @@ if (!dir.exists(file.path(datadir,"final","en_US"))) {
 }
 ```
 
-```{r}
+```{r echo=T, comment='', collapse=T}
 ## Status after downloading and unpacking the text corpus
 dir(datadir)
 dir(file.path(datadir,"final","en_US"))
@@ -293,7 +293,7 @@ rm(list=c("words_EN"))
 invisible(gc())
 ```
 
-```{r}
+```{r echo=T, comment='', collapse=T}
 ## Status after downloading the dictionaries
 dir(datadir)
 dir(file.path(datadir,"final","en_US"))
@@ -445,14 +445,14 @@ total of **`r cntIncid` word incidences** of **`r round(length(wordFreqDescNorm)
 
 The **Top-20 single words** by the frequency are (in descending order, frequencies in percent):
 
-```{r echo = F}
+```{r echo=T, comment='', collapse=T }
 round(wordFreqDescNorm[1:20]*100,4)
 ```
 
 Here is the estimation, how many top words build ten, twenty, fifty and ninety percent quantile of all word occurrences in the 
 text corpus.
 
-```{r }
+```{r echo=T, comment='', collapse=T }
 ## Twenty percent of the words/stems are only the first twenty seven in the list.
 ## Less than 400 words constitute the half of the text corpus
 sum(cumsum(wordFreqDescNorm) <= .1)
@@ -563,7 +563,7 @@ the future prediction engine, it is still much less, than the number of possible
 (`r length(wordFreqDescNorm)*(length(wordFreqDescNorm)-1)`)!  Statistically proven, English is not a simply word mess.  
 The top-20 bigrams are (absolute numbers here):
 
-```{r Bigrams, echo=F, comment=''}
+```{r Bigrams, echo=T, comment='', collapse=T}
 for (i in 1:20) print(paste(names(bigrams[i]),bigrams[i],sep = " - "))
 ```
 
@@ -596,7 +596,7 @@ invisible(gc())
 Analysis has revealed **`r length(trigrams)` unique word triplets**.  
 One more time, no real surprises under the top-20 and long downwards:
 
-```{r echo=F}
+```{r echo=T, comment='', collapse=T}
 for (i in 1:20) print(paste(names(trigrams[i]),trigrams[i],sep = " - "))
 ```
 
@@ -627,7 +627,7 @@ invisible(gc())
 
 Top-20 four-grams:  
 
-```{r Top-20 four-grams, echo=F}
+```{r Top-20 four-grams, echo=T, comment='', collapse=T}
 for (i in 1:20) print(paste(names(four_grams[i]),four_grams[i],sep = " - "))
 ```
 
@@ -1009,7 +1009,7 @@ inWordPredictEngine <- function(xpr) {
 
 ## Short engine tests
 
-```{r Testing the prediciton prototype, echo=T, collapse = T}
+```{r Testing the prediciton prototype, echo=T, comment='', collapse=T}
 ## We are probably not perfect yet ;-)
 
 #Normal case
