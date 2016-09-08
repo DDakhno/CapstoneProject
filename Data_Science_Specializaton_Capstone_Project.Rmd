@@ -35,7 +35,7 @@ docsToLower <- dictToLower
 docsToStem  <- FALSE
 docsToTrimmComb <- dictToTrimmComb
 
-prob_train <- .04 #train probability resp. all corpus lines
+prob_train <- .06 #train probability resp. all corpus lines
 # prob_test <- prob_train/2  #test to the whole corpus
 # prob_valid <- prob_train/2 #validation to the whole corpus
 ##########################################################################################
@@ -121,7 +121,8 @@ Here only the proofs of the work done:
 ```{r echo=T, comment='', collapse=T }
 ## Status before downloading
 dir(datadir)
-dir(file.path(datadir,"final","en_EN"))
+dir(file.path(datadir,"final","en_US"))
+dir(file.path(scowldir))
 dir(file.path(datadir,"en_dicts"))
 ```
 
@@ -152,6 +153,7 @@ if (!dir.exists(file.path(datadir,"final","en_US"))) {
 ## Status after downloading and unpacking the text corpus
 dir(datadir)
 dir(file.path(datadir,"final","en_US"))
+dir(file.path(scowldir))
 dir(file.path(datadir,"en_dicts"))
 ```
 ----------------------------------------------------------------------------------  
@@ -297,6 +299,7 @@ invisible(gc())
 ## Status after downloading the dictionaries
 dir(datadir)
 dir(file.path(datadir,"final","en_US"))
+dir(file.path(scowldir))
 dir(file.path(datadir,"en_dicts"))
 ``` 
 
@@ -730,7 +733,7 @@ coverage:
 
 The difference for 90% quantile is much more strong.
 
-So, *the longer predictors have better predictive performance* (at least for one, two and three words).
+So, **the longer predictors have better predictive performance** (at least for one, two and three words).
 
 
 ----------------------------------------------------------------------------------  
@@ -870,19 +873,19 @@ used_words <- sort(wordFreqDescNorm[dt_words_EN[names(wordFreqDescNorm),]$words_
 rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
 
 #rm(wordFreqDescNorm)
-#invisible(gc())
+invisible(gc())
 
 dummies <- rep(0,length(rest_words))
 
 
-rm(dummies, used_words)
-#invisible(gc())
+invisible(gc())
 
-dt_words_EN <- data.table(freq = c(used_words), words_EN = c(names(used_words),names(rest_words)))
+dt_words_EN <- data.table(freq = c(used_words,dummies), words_EN = c(names(used_words),names(rest_words)))
 setkey(dt_words_EN, words_EN)
 
 
-rm(all_words)
+rm(dummies)
+rm(rest_words)
 invisible(gc())
 
 ## Possible savings throufh limiting of the redundance of the predictors to max. top 30
