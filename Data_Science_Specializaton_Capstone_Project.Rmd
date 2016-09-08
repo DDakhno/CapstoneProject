@@ -35,7 +35,7 @@ docsToLower <- dictToLower
 docsToStem  <- FALSE
 docsToTrimmComb <- dictToTrimmComb
 
-prob_train <- .08 #train probability resp. all corpus lines
+prob_train <- .04 #train probability resp. all corpus lines
 # prob_test <- prob_train/2  #test to the whole corpus
 # prob_valid <- prob_train/2 #validation to the whole corpus
 ##########################################################################################
@@ -427,7 +427,7 @@ could not be identified as english.
 ## Exploratory data analysis
 
 
-```{r DTM, echo = F, cache=F}
+```{r DTM, echo = T, cache=F, collapse = T}
 #Creating Term-Document Matrices
 
 dtmTr <- DocumentTermMatrix(x = tidyTrainCorpus)
@@ -789,7 +789,7 @@ database.
 
 ## In-word prediction db
 
-dt_inWord <- data.table(wordFreqDescNorm, names(wordFreqDescNorm))
+db_monograms <- data.table(wordFreqDescNorm, names(wordFreqDescNorm))
 
 ## Evaluating the possible memory savings through the limit of 30 words per predictor
 ## Maximal about 12% for the anyway smaller bigrams.
@@ -875,15 +875,15 @@ rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
 dummies <- rep(0,length(rest_words))
 
 
-#rm(dummies, used_words)
+rm(dummies, used_words)
 #invisible(gc())
 
 dt_words_EN <- data.table(freq = c(used_words), words_EN = c(names(used_words),names(rest_words)))
 setkey(dt_words_EN, words_EN)
 
 
-#rm(all_words)
-#invisible(gc())
+rm(all_words)
+invisible(gc())
 
 ## Possible savings throufh limiting of the redundance of the predictors to max. top 30
 
@@ -892,57 +892,80 @@ wlimit <- 3
 
 predictEngine <- function(xpr) {
         
-        xprOrig <- xpr # preserving the original search expression
-        
         rtrn <- data.frame() #as default an empty data frame (nothing found)
         
-        #we don't deal with the foreign and mixed inputs
-        if (Encoding(xpr) == "unknown") {  
-                
-                askDB <- function(xpr) {
-                        ### Conditioning predictor expression
-                        
-                        #Trimming all blanks : "  aaa   bbb    ccc       " -> " aa bb cc "
-                        xpr <- gsub("[[:blank:]]+"," ", xpr) # "red        grape" -> "red grape"
-                        # Removing blanks at front and back
-                        xpr <- gsub("(^[[:blank:]]+|[[:blank:]]+$)","", xpr) # "  red grape    " -> "red grape"
-                        # Trimming to  the last punctuation mark : "red ., grape" -> "grape"
-                        #we begin from scratch after the punctuation characters like .,?!
-                        xpr <- sub(paste("^.*",punctmarks,"([[:blank:]]+|$)", sep=""),"",xpr)
-                        lgth <- stri_count(xpr, fixed = " ")+1
-                        
-                        if(stri_length(xpr) > 0) {
-                                if (lgth == 1) rtrn <- na.omit(dt_bigrams[xpr,][1:limit])
-                                if (lgth == 2) rtrn <- na.omit(dt_trigrams[xpr,][1:limit])
-                                if (lgth == 3) rtrn <- na.omit(dt_four_grams[xpr,][1:limit])
-                        } else { 
-                                rtrn <- inWordPredictEngine(xpr) 
-                        }
-                        rtrn
-                }
-                
-                rtrn <- askDB(xpr)
-                
-                if (xpr == "") {
-                        rtrn <- inWordPredictEngine(xpr)
+        condExpr <- function(xpr) {
+                #Trimming all blanks : "  aaa   bbb    ccc       " -> " aa bb cc "
+                # Removing blanks at front and back
+                xpr <- gsub("(^[[:blank:]]+|[[:blank:]]+$)","",xpr)
+                # Leaving max 3 words
+                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
+                lng <- length(tt)
+                if (lng > 3) {
+                        xpr <- paste(tt[lng-2],tt[lng-1],tt[lng], collapse = " ")
                 } else {
+                        xpr <- paste(tt, collapse = " ")
+                }
+                # Trimming to  the last punctuation mark : "red ., grape" -> "grape"
+                #we begin from scratch after the punctuation characters like .,?!
+                xpr <- sub(paste("^.*",punctmarks,"([[:blank:]]+|$)", sep=""),"",xpr)
+                xpr
+        }
+        
+        removeFirstWord <- function(xpr) {
+                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
+                lng <- length(tt)
+                if (lng > 1) {
+                        xpr <- paste(tt[2:lng], collapse = " ")
+                }
+                xpr
+        }
+        
+        lastWord <- function(xpr) {
+                gsub("^.*  *","",condExpr(xpr))
+        }
+        lastButOneWord <- function(xpr) {
+                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
+                lng <- length(tt)
+                if (lng > 1) {
+                        xpr <- paste(tt[lng-1], collapse = " ")
+                }
+                xpr
+        }
+        
+       askDB <- function(xpr) {
+                xpr <- condExpr(xpr)
+                lng <- stri_count(xpr, fixed = " ")+1
+                
+                if (lng == 1) rtrn <- na.omit(dt_bigrams[xpr,][1:limit])
+                if (lng == 2) rtrn <- na.omit(dt_trigrams[xpr,][1:limit])
+                if (lng == 3) rtrn <- na.omit(dt_four_grams[xpr,][1:limit])
+                rtrn
+        }
+        
+        xpr <- xprOrig <- condExpr(xpr)
+        
+        if (xpr != "") {
+                #we don't deal with the foreign and mixed inputs
+                if (Encoding(xpr) == "unknown") {  
+                        
+                        rtrn <- askDB(xpr)
+                        
                         ## Nothing exact found in the database :((
+                        
+                        # Trying to reduce the ONLY the last word of preidctor to the reasonabe( (?): "aa bb ccc" -> "aa bb cc" -> "aa bb c"
                         if (nrow(rtrn) == 0 ) { 
-                                
                                 xpr <- xprOrig
-                                lgthOrig <- stri_count(xprOrig, fixed = " ")+1
-                                
-                                # Trying to reduce the ONLY the last word of preidctor to the reasonabe( (?): "aa bb ccc" -> "aa bb cc" -> "aa bb c"
-                                xpr <- gsub(".$","",xpr)
-                                lgth <- stri_count(xpr, fixed = " ")+1
+                                lng <- lngOrig <- stri_count(xpr, fixed = " ")+1
                                 
                                 # Condition Original number of words &&  more than one word (see in-word-prediction)
-                                while (lgth > 1 && lgth == lgthOrig && nrow(rtrn) == 0) {
+                                while (lng > 1 && lng == lngOrig && nrow(rtrn) == 0) {
                                         xpr <-gsub(".$","",xpr)
-                                        rtrn <- askDB(xpr)
-                                        lgth <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                                        xpr <- condExpr(xpr)
+                                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                                        if (lng == lngOrig)
+                                                rtrn <- askDB(xpr)
                                 } 
-                                rm(xpr)
                                 
                         }
                         
@@ -951,94 +974,105 @@ predictEngine <- function(xpr) {
                         ## Original predictor value!
                         
                         if (nrow(rtrn) == 0) {
+                                #beginnig from scratch
+                                xpr <- xprOrig 
                                 
-                                xpr <- xprOrig #beginnig from scratch
-                                
-                                lgth <- stri_count(xpr, fixed = " ", case_insensitive = T)+1
-                                
-                                ## 
-                                while (nrow(rtrn) == 0 && lgth > 1) {
-                                        #remove the first word from expression : "aa bb cc" -> "bb cc"
-                                        xpr <- sub("^[[:blank:]]*[^[:blank:]]+[[:blank:]]*", "", xpr)
-                                        lgth <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
-                                        if (lgth > 1) {
-                                                rtrn <- askDB(xpr)
-                                        } else { 
-                                                ## Last word standing, still no result...
-                                                rtrn <- inWordPredictEngine(xpr)
-                                        }
-                                } 
-                                
-                                
-                        } 
+                                if (xpr != "") {
+                                        lng <- stri_count(xpr, fixed = " ", case_insensitive = T)+1
+                                        
+                                        if (lng > 1) {
+                                                while (lng > 1 && nrow(rtrn) == 0) {
+                                                        #remove the first word from expression : "aa bb cc" -> "bb cc"
+                                                        xpr <- removeFirstWord(xpr)
+                                                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                                                        if (lng > 1) {
+                                                                rtrn <- askDB(xpr)
+                                                        } 
+                                                }
+                                        } 
+                                }
+                        }
+                        xpr <- xprOrig
+                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
+                        
+                        # Falling back to one - last word in expression
+                        if (nrow(rtrn) == 0) rtrn <- askDB(lastWord(xpr))
+                        
+                        # Still nothing...
+                        if (nrow(rtrn) == 0) rtrn <- askDB(inWordPredictEngine(lastWord(xpr))[[2]][1])
+                        # A nonsense last word - trying last but one.
+                        if (nrow(rtrn) == 0) rtrn <- askDB(inWordPredictEngine(lastButOneWord(xpr))[[2]][1])
+                        # .......((((
+                        if (nrow(rtrn) == 0) rtrn <- dt_words_EN[1:limit,]
+                        
                 }
                 rtrn
-        } else { rtrn } # No prediction for chinese, russian, hebrew and the rest of strange languages!
-}
-
-inWordPredictEngine <- function(xpr) {
+        } else { rtrn } # No prediction for empty strings, chinese, russian, hebrew and the rest of strange languages!
+}        
         
-        xprOrig <- xpr
-        rtrn = data.frame()
-        if (stri_length(xpr) > 0) {
-                ## Use case #1 - a word is in process of typing - so to short, we could probably recognize it by the stem
-                rtrn <- dt_words_EN %>% filter(words_EN %like% paste("^",xpr, sep = ""))
+        inWordPredictEngine <- function(xpr) {
                 
-                ## Use case #2 - the word is probably too long. Reducing in steps up to length wlimit 
-                if (nrow(rtrn) == 0) {
-                        while(stri_length(xpr) >= wlimit && nrow(rtrn) == 0) {
-                                xpr <- gsub(".$","",xpr)
-                                xpr
-                                rtrn <- na.omit(dt_words_EN[xpr,])
-                                rtrn
-                        }
+                rtrn = data.frame()
+                if (stri_length(xpr) > 0) {
+                        ## Use case #1 - a word is in process of typing - so to short, we could probably recognize it by the stem
+                        rtrn <- dt_words_EN %>% filter(words_EN %like% paste("^",xpr, sep = ""))
                         
-                        # Absolutely nothing found  -> simply give the list of the most top-[limit]
-                        if (nrow(rtrn) == 0){
-                                rtrn <- head(arrange(dt_words_EN, desc(freq)),limit) # Yes, we can! Even, if these are the trivials.
+                        ## Use case #2 - the word is probably too long. Reducing in steps up to length wlimit 
+                        if (nrow(rtrn) == 0) {
+                                while(stri_length(xpr) >= wlimit && nrow(rtrn) == 0) {
+                                        xpr <- gsub(".$","",xpr)
+                                        xpr
+                                        rtrn <- na.omit(dt_words_EN[xpr,])
+                                        rtrn
+                                }
+                                
+                                # Absolutely nothing found  -> simply give the list of the most top-[limit]
+                                if (nrow(rtrn) == 0){
+                                        rtrn <- dt_words_EN[1:limit,] # Yes, we can! Even, if these are the trivials.
+                                }
                         }
                 }
+                else {
+                        rtrn <- dt_words_EN[1:limit,] # Yes, we can! Even, if these are the trivials.
+                }
+                rtrn
         }
-        else {
-                rtrn <- head(arrange(dt_words_EN, desc(freq)),limit) # Yes, we can! Even, if these are the trivials.
-        }
-        rtrn
-}
-
-```
-
-## Short engine tests
-
-```{r Testing the prediciton prototype, echo=T, comment='', collapse=T}
-## We are probably not perfect yet ;-)
-
-#Normal case
-system.time(rslt <- predictEngine("red"))
-head(rslt)
-#Normal case
-system.time(rslt <- predictEngine("red river"))
-head(rslt)
-# Normal case, predictor not found - shortening the second word
-system.time(rslt <- predictEngine("red readd"))
-head(rslt)
-# Control for the second part
-system.time(rslt <- predictEngine("readdd"))
-head(rslt)
-# Predictor ends with punctuation char - nothing to be returned
-system.time(rslt <- predictEngine("red river ,"))
-head(rslt)
-
-# After foreign words not suggestions delivered
-system.time(rslt <- predictEngine("red уменьшению"))
-head(rslt)
-```
-
-----------------------------------------------------------------------------------  
-
-# Conclusion
-
-- We have successfully downloaded and performed an exploration data analysis of the english recommended text corpus.  
-- The results of the analysis let us build a plain, but well performing prediction algorithm.  
-- The insights, algorithm and prototype of prediction engine are a very good basis for further technically efficient and 
-parsimonious development product.
-
+        
+        ```
+        
+        ## Short engine tests
+        
+        ```{r Testing the prediciton prototype, echo=T, comment='', collapse=T}
+        ## We are probably not perfect yet ;-)
+        
+        #Normal case
+        system.time(rslt <- predictEngine("red"))
+        head(rslt)
+        #Normal case
+        system.time(rslt <- predictEngine("it was"))
+        head(rslt)
+        # Predictor not found in DB - shortening the second word
+        system.time(rslt <- predictEngine("it readd"))
+        head(rslt)
+        # Control for the second part
+        system.time(rslt <- predictEngine("readdd"))
+        head(rslt)
+        # Predictor ends with punctuation mark - nothing to be returned
+        system.time(rslt <- predictEngine("red river ,"))
+        head(rslt)
+        
+        # After foreign words no suggestions delivered
+        system.time(rslt <- predictEngine("red уменьшению"))
+        head(rslt)
+        ```
+        
+        ----------------------------------------------------------------------------------  
+        
+        # Conclusion
+        
+        - We have successfully downloaded and performed an exploration data analysis of the english recommended text corpus.  
+        - The results of the analysis let us build a plain, but well performing prediction algorithm.  
+        - The insights, algorithm and prototype of prediction engine are a very good basis for further technically efficient and 
+        parsimonious development product.
+        
+        
