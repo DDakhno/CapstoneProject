@@ -1,6 +1,8 @@
 #!/usr/local/bin/Rscript
 
-START <- as.integer(Sys.time())
+#Cleaning the workspace
+rm(list = ls())
+invisible(gc())
 
 suppressMessages(library(tm))
 library(stringi)
@@ -8,10 +10,8 @@ suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
 library(tau)
 
-#Cleaning the workspace
-rm(list = ls())
-invisible(gc())
 
+START <- as.integer(Sys.time())
 
 ## Modelling relevant configuration
 dictToLower <- TRUE
@@ -26,10 +26,11 @@ prob_train <- .15  #train volume in proportion to all corpus lines
 # prob_valid <- prob_train/2 #validation to the whole corpus
 ##########################################################################################
 
+tmst <- as.integer(Sys.time())
 ## Technical configuration
 homedir <- "/home/d/R-Work/CapstoneProject"
 datadir <- file.path(homedir,"data")
-tmpdir <- paste(homedir,"/tmp",prob_train, sep = "")
+tmpdir <- paste(homedir,"/tmp",prob_train,"_",tmst, sep = "")
 endicts <- file.path(datadir,"en_dicts")
 scowldir <- file.path(datadir,"SCOWL")
 projectcorpURL <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
@@ -231,6 +232,14 @@ treatPunctuations <- function(x) {
         # Removing  " - "
         x <- gsub("[[:blank:]]+[-]+[[:blank:]]+"," ",x)
         
+        # Removing all parenthesis of all kinds
+        #... sorry, smilies ;)
+        #x <- gsub("\x28\x29\x7b\x7d\x5b\x5d\x7c"," ",x)
+        
+        x <- gsub("[(]+([a-zA-Z])", ". \\2", x)
+        x <- gsub("([a-zA-Z])[.!?]*[)]+", "\\1 . ", x)
+        
+        
         # Removing the isolated quote sequences, like "is "" hah"  -> "is hah"
         x <- gsub("[[:blank:]]+[\x22\x27]+[[:blank:]]+", " ", x)
         
@@ -239,7 +248,6 @@ treatPunctuations <- function(x) {
         x <- gsub("([a-z])\"([a-z])","\\1'\\2",x)
         
         ## Unquoting the citation, making a separate sentence 
-        
         #### In the middle of the line
         #Removing the quotes at the begining of a citation, separating with point. (""It is...)
         x <- gsub("[[:blank:]]+[\x27\x22]+([a-zA-Z])"," . \\1",x)
@@ -251,7 +259,7 @@ treatPunctuations <- function(x) {
         x <- gsub("^[\x22\x27]+([^\x22\x27]*)[\x22\x27]+[[:blank:]]+", "\\1 . ", x)
         
         ### at the end of line
-        x <- gsub("([^\x22\x27]+)[\x22\x27]+[[:blank:]]+[.!?]*[[:blank:]]+$", " . \\1 .", x)
+        x <- gsub("([^\x22\x27]+)[\x22\x27]+[[:blank:]]*[.!?]*[[:blank:]]*$", " . \\1 .", x)
         
 
         # Substituting multiple punctuation characters at the end of the line with " ."
@@ -260,10 +268,13 @@ treatPunctuations <- function(x) {
         # Formating the end-of-sentence (characters ".!?")
         x <- gsub(punctmarkGroup," \\1 ", x, perl = T)
         
-        #         # Putting "." at the end of the line (if not closed by author or before)
-        x <- gsub("([^,.!?]) +$","\\1 .",x)
-       
+        # Last resort '" OR ''
+        # x <- gsub("(^[\x22\x27]+|[\x22\x27]+$)","",x)
+        x <- gsub("[\x22\x27]+","",x)
         
+        
+        # Anyway, the point at the end of the line
+        x <- sub("$"," .",x)
         x
 }
 # # English words may begin with letters, numbers ("25th") or lately "#" (as a hashtag) and "@"
@@ -297,18 +308,16 @@ for(i in seq_along(workTrainCorpus)) {
         workTrainCorpus[[i]]$content <- treatPunctuations(workTrainCorpus[[i]]$content)
 }
 
-filterAwayNonLatinWords <- function(xx) {
-        gsub(pattern = "[[:blank:]]+[^[:blank:]]*[^a-zA-Z0-9.\x27\x2f_-?!,]+", replacement = " ",x = xx)
-}
 
-filterNotLatinWords <- function(x) gsub("[^[:blank:]]*[^\x20-\x7e]+[^[:blank:]]*", "", x)
+
+removeNotLatinWords <- function(x) gsub("[\x21-\x7e]*[^\x20-\x7e]+[\x21-\x7e]*", "", x)
 
 for(i in seq_along(workTrainCorpus)) {
-        workTrainCorpus[[i]]$content <- filterNotLatinWords(workTrainCorpus[[i]]$content)
+        workTrainCorpus[[i]]$content <- removeNotLatinWords(workTrainCorpus[[i]]$content)
 }
 
 
-tidyTrainCorpus <- workTrainCorpus
+tidyTrainCorpus <- tm_map(workTrainCorpus, stripWhitespace)
 
 writeCorpus(x = tidyTrainCorpus,path = file.path(tmpdir,"after"))
 
@@ -328,12 +337,12 @@ monograms <- unclass(monograms)
 
 mask <- grepl(punctmarks,names(monograms))
 monograms <- monograms[!mask]
-mask <- grepl("['*+]",names(monograms))
-
-monograms <- monograms[!mask]
+# mask <- grepl("['*+]",names(monograms))
+#monograms <- monograms[!mask]
 wordFreqDescNorm <- monograms #for code compatbility reasons
 dt_monograms <- data.table(freq = monograms, word = names(monograms))
 setkey(dt_monograms, word)
+save(dt_monograms, file = file.path(tmpdir,"dt_monograms.Rdata"))
 invisible(gc())
 
 ## Top-20 single words
@@ -354,10 +363,10 @@ bigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content,
 bigrams <- unclass(bigrams)
 
 #Selecting only the wordpairs without separators and "'"
-mask <- grepl(punctmarks,names(bigrams))
+mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(bigrams))
 bigrams <- bigrams[!mask]
-mask <- grepl("['*+]",names(bigrams))
-bigrams <- bigrams[!mask]
+# mask <- grepl("['*+]",names(bigrams))
+# bigrams <- bigrams[!mask]
 
 dt_bigrams <- data.table(freq = bigrams, 
                          predictor = gsub(" [^ ]*$","",names(bigrams)), 
@@ -382,10 +391,10 @@ trigrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$content
 trigrams <- unclass(trigrams)
 
 #Selecting only the wordpairs without separators and "'"
-mask <- grepl(punctmarks,names(trigrams))
+mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(trigrams))
 trigrams <- trigrams[!mask]
-mask <- grepl("['*+]",names(trigrams))
-trigrams <- trigrams[!mask]
+# mask <- grepl("['*+]",names(trigrams))
+# trigrams <- trigrams[!mask]
 
 dt_trigrams <- data.table(freq = trigrams, 
                           predictor = gsub(" [^ ]*$","",names(trigrams)), 
@@ -410,7 +419,7 @@ four_grams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$conte
 four_grams <- unclass(four_grams)
 
 #Selecting only the wordpairs without separators and "'"
-mask <- grepl(paste("(",punctmarks,"|['*+])",sep=""),names(four_grams))
+mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(four_grams))
 four_grams <- four_grams[!mask]
 
 dt_four_grams <- data.table(freq = four_grams, 
@@ -435,7 +444,7 @@ pentagrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$conte
 pentagrams <- unclass(pentagrams)
 
 #Selecting only the wordpairs without separators and "'"
-mask <- grepl(paste("(",punctmarks,"|['*+])",sep=""),names(pentagrams))
+mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(pentagrams))
 pentagrams <- pentagrams[!mask]
 
 dt_pentagrams <- data.table(freq = pentagrams, 
@@ -455,16 +464,71 @@ invisible(gc())
 ## Top-20 pentagrams
 head(dt_pentagrams %>% arrange(desc(freq)),20)
 
+#########################################################################################################
+# Frame preconditions for defining the prediction model
+#########################################################################################################
+# Criterion                     Bigrams              Trigrams         Fourgrams            Pentagrams
+#-----------------------------+------------------+-------------------+------------------+---------------------
+# Total nr unique, Mio.                 3.2             6.8             7.5                     6.8
+# Sum. freq                                             9,6
+# Predictors, unique,                   .250            2.8             5.8                     6.4
+# Unique/Total                          .08             .4              .77                     .93
+# DB size in memory, Mb                 86              294             515                     572
+########################################################################################################
+# Purifying the dt_trigrams
+#-------------------------------------------------------+----------------+------------------------------
+# Step                                                          Nrow            Object.size,Mbyte
+#-------------------------------------------------------+----------------+------------------------------
+# Original                                                      6696991         288.90
+# freq > 1                                                      749942          28.43
+# freq > 2                                                      342777          12.97
+#
+#
+########################################################################################################
 
-#The total number of  unique     bigrams         
-nrow(dt_bigrams)
-#The total number of  unique    trigrams:       
-nrow(dt_trigrams)  
-#The total number of  unique    four-grams:    
-nrow(dt_four_grams)  
-#The total number of  unique    pentagrams:      
-nrow(dt_pentagrams)
+## Trimming the databases(datatables)
 
+
+trimDataTable <- function(x) {
+        print(paste("Original DB:",x))
+        db <- get(x)
+        print(paste("Nrow:",nrow(db)))
+        print(paste("Size in memory, MB:",object.size(db)/1024/1024))
+        print(paste("Max. freq :",max(db$freq)))
+        print(paste("Mean. freq :",mean(db$freq)))
+        print(paste("Median. freq :",median(db$freq)))
+        print(paste("Proportion unique predictors:", length(unique(db$predictor))/nrow(db)))
+        print("-----------------------")
+
+        print(paste("Nrow, freq > 1 :", nrow(db %>% filter(freq > 1))))
+        print(paste("Size in MB:, freq > 1 :", object.size(db %>% filter(freq > 1))/1024/1024))
+        print(paste("Nrow, freq > 2 :", nrow(db %>% filter(freq > 2))))
+        print(paste("Size in MB:, freq > 2 :", object.size(db %>% filter(freq > 2))/1024/1024))
+        print(paste("Nrow, freq > 3 :", nrow(db %>% filter(freq > 3))))
+        print(paste("Size in MB:, freq > 3 :", object.size(db %>% filter(freq > 3))/1024/1024))
+        print(paste("Nrow, freq > 4 :", nrow(db %>% filter(freq > 4))))
+        print(paste("Size in MB:, freq > 4 :", object.size(db %>% filter(freq > 4))/1024/1024))
+        print("-----------------------")
+        print("Trimming the DB by freq > 1")
+        db_trimmed <- db %>% filter(freq > 1)
+        print(paste("Nrow:",nrow(db_trimmed)))
+        print(paste("Size in memory, MB:",object.size(db_trimmed)/1024/1024))
+        print(paste("Max. freq :",max(db_trimmed$freq)))
+        print(paste("Mean. freq :",mean(db_trimmed$freq)))
+        print(paste("Median. freq :",median(db_trimmed$freq)))
+        print(paste("Proportion unique predictors:", length(unique(db_trimmed$predictor))/nrow(db_trimmed)))
+        
+        print(paste("Nr. usages in trimmed to all usages :",sum(db_trimmed$freq)/sum(db$freq)))
+        
+        print("-----------------------")
+        print("=========================================")
+        db_trimmed
+}
+
+for (x in c("dt_bigrams","dt_trigrams","dt_four_grams","dt_pentagrams")) trimDataTable(x)
+
+
+paste("Exe. time:",(as.integer(Sys.time()) - START)/60,"min.")
 
 
 #         # Concetps and algorithms for prediction model.
@@ -495,26 +559,7 @@ nrow(dt_pentagrams)
 # 5. We need for development much enough resources, to produce  the parsimonious and efficient end product. 
 # 
 # 
-# ----------------------------------------------------------------------------------  
-#         
-#         # Quick and plain prototype of prediction engine
-#         
-#         The questions posed above are to intriguing to wait with the answers. Experiences gathered in the former stage oblige.
-# 
-# Here is a demonstration of the prediction engine prototype as built in a short time.  
-# 
-# - The order of evaluation of predictor against database is sequence of 3, then 2 and 1 words.
-# - The lower limit for in-word completion set at 3 characters.
-# - The upper limit for the number of suggestions set at 30 words.
-# - As a fallback for predictor missed in the database is used a derivate, shortened by one word at front 
-# ("nice moonlight evening" -> "moonlight evening"). The procedure is iterated repeated when needed.
-# - The in-word prediction works with the same list, allowing the completion of the short chunks.
-# - If the char sequence can not be found in the word list, it is iterative shortened and compared against the 
-# database.
-# - The last resort is suggesting the top-30 words form the common list.
-# - Right after the punctuation marks come no suggestions, the play begins from scratch with the first word.
-# - The incredible performance of the indexed data tables and dplyr package are extensively used.
-# - Actual output of the engine includes the data like frequency, the predictor and suggestion (last column).
+
 
 
 
@@ -564,18 +609,18 @@ nrow(dt_pentagrams)
 # and so on...
 
 ## Reorganize the dt_words_EN
-invisible(gc())
-
-used_words <- sort(wordFreqDescNorm[dt_words_EN[names(wordFreqDescNorm),]$words_EN], decreasing = T)
-rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
-dummies <- rep(0,length(rest_words))
-names(dummies) <- rest_words
-all_words <- c(used_words,dummies)
-nms <- names(all_words)
-
-dt_words_EN <- data.table(freq = all_words, words_EN = nms)
-#dt_words_EN <- dt_words_EN %>% arrange(freq)
-setkey(dt_words_EN, words_EN)
+# invisible(gc())
+# 
+# used_words <- sort(wordFreqDescNorm[dt_words_EN[names(wordFreqDescNorm),]$words_EN], decreasing = T)
+# rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
+# dummies <- rep(0,length(rest_words))
+# names(dummies) <- rest_words
+# all_words <- c(used_words,dummies)
+# nms <- names(all_words)
+# 
+# dt_words_EN <- data.table(freq = all_words, words_EN = nms)
+# #dt_words_EN <- dt_words_EN %>% arrange(freq)
+# setkey(dt_words_EN, words_EN)
 
 # rm(wordFreqDescNorm)
 # rm(used_words)
@@ -585,232 +630,7 @@ setkey(dt_words_EN, words_EN)
 #rm(dt_words_tmp)
 # invisible(gc())
 
-#########################################################################################################
-# Frame preconditions for defining the prediction model
-#########################################################################################################
-# Criterion                     Bigrams              Trigrams         Fourgrams            Pentagrams
-#-----------------------------+------------------+-------------------+------------------+---------------------
-# Total nr unique, Mio.                 3.2             6.8             7.5                     6.8
-# Sum. freq                                             9,6
-# Predictors, unique,                   .250            2.8             5.8                     6.4
-# Unique/Total                          .08             .4              .77                     .93
-# DB size in memory, Mb                 86              294             515                     572
-########################################################################################################
-# Purifying the dt_trigrams
-#-------------------------------------------------------+----------------+------------------------------
-# Step                                                          Nrow            Object.size,Mbyte
-#-------------------------------------------------------+----------------+------------------------------
-# Original                                                      6696991         288.90
-# freq > 1                                                      749942          28.43
-# freq > 2                                                      342777          12.97
-#
-#
-########################################################################################################
+
 
 ## Possible savings through limiting of the redundance of the predictors to max. top 30
-
-linesLimit <- 30
-wordLengthLimit <- 3
-
-unstemmExprToRegex <- function(x) {
-        
-        wrds <- strsplit(x, split = "[[:blank:]]+")[[1]]
-        wrds
-        wrds <- sapply(wrds, stemDocument)
-        paste("^",paste(wrds,  collapse = "[^[:blank:]]* "),sep = "", collapse = "")
-}
-
-predictEngine <- function(xpr) {
-        
-        max_words = 4 #Maximal length of the predictor, words
-        
-        rtrn <- data.frame() #as default an empty data frame (nothing found)
-        
-        condExpr <- function(xpr) {
-                
-                ## Essentially the function treatPucntuations used for the main text processing before
-                xpr <- treatPunctuations(xpr)
-                
-                # Trimming to  the last punctuation mark : "red ., grape" -> "grape"
-                #we begin from scratch after the punctuation characters like .,?!
-                xpr <- gsub("([ .])+$","",xpr, perl = T)
-                
-                #Remove the same words ("wordsnogo") as in the previously produced text (articles)
-                rgxpr <- paste(" +(",paste(wordsnogo,sep="|", collapse="|"),") +",sep="")
-                xpr <- gsub(rgxpr," ",xpr)
-                #To lower
-                xpr <- tolower(xpr)
-                # Removing blanks at front and back
-                xpr <- gsub("(^[[:blank:]]+|[[:blank:]]+$)","",xpr)
-                # Leaving max max_words in predictor (4 by now)
-                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
-                lng <- length(tt)
-                if (lng > max_words) {
-                        xpr <- paste(tt[lng-3],tt[lng-2],tt[lng-1],tt[lng], collapse = " ")
-                } else {
-                        xpr <- paste(tt, collapse = " ")
-                }
-                
-                gsub(rgxpr," ",xpr)
-                
-        }
-        
-        removeFirstWord <- function(xpr) {
-                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
-                lng <- length(tt)
-                if (lng > 1) {
-                        xpr <- paste(tt[2:lng], collapse = " ")
-                }
-                xpr
-        }
-        
-        lastWord <- function(xpr) {
-                gsub("^.*  *","",condExpr(xpr))
-        }
-        lastButOneWord <- function(xpr) {
-                tt <- stri_split(xpr, regex = "[[:blank:]]+")[[1]]
-                lng <- length(tt)
-                if (lng > 1) {
-                        xpr <- paste(tt[lng-1], collapse = " ")
-                }
-                xpr
-        }
-        
-        askDB <- function(xpr) {
-                xpr <- condExpr(xpr)
-                lng <- stri_count(xpr, fixed = " ")+1
-                
-                if (lng == 1) rtrn <- na.omit(dt_bigrams[xpr,])
-                if (lng == 2) rtrn <- na.omit(dt_trigrams[xpr,])
-                if (lng == 3) rtrn <- na.omit(dt_four_grams[xpr,])
-                if (lng == 4) rtrn <- na.omit(dt_pentagrams[xpr,])
-                head(arrange(rtrn,desc(freq)),linesLimit)
-        }
-        
-        xpr <- xprOrig <- condExpr(xpr)
-        
-        if (xpr != "") {
-                #we don't deal with the foreign and mixed inputs
-                if (Encoding(xpr) == "unknown") {  
-                        
-                        rtrn <- askDB(xpr)
-                        
-                        ## Nothing exact found in the database :((
-                        
-                        # Trying to reduce the ONLY the last word of preidctor to the reasonabe( (?): "aa bb ccc" -> "aa bb cc" -> "aa bb c"
-                        if (nrow(rtrn) == 0 ) { 
-                                xpr <- xprOrig
-                                lng <- lngOrig <- stri_count(xpr, fixed = " ")+1
-                                
-                                # Condition Original number of words &&  more than one word (see in-word-prediction)
-                                while (lng > 1 && lng == lngOrig && nrow(rtrn) == 0) {
-                                        xpr <-gsub(".$","",xpr)
-                                        xpr <- condExpr(xpr)
-                                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
-                                        if (lng == lngOrig)
-                                                rtrn <- askDB(xpr)
-                                } 
-                                
-                        }
-                        
-                        ## Still nothing after shortening the last one.
-                        ## Fallback from n-gram to (n-1)-gram like - "aa bb cc" -> "bb cc"
-                        ## Original predictor value!
-                        
-                        if (nrow(rtrn) == 0) {
-                                #beginnig from scratch
-                                xpr <- xprOrig 
-                                
-                                if (xpr != "") {
-                                        lng <- stri_count(xpr, fixed = " ", case_insensitive = T)+1
-                                        
-                                        if (lng > 1) {
-                                                while (lng > 1 && nrow(rtrn) == 0) {
-                                                        #remove the first word from expression : "aa bb cc" -> "bb cc"
-                                                        xpr <- removeFirstWord(xpr)
-                                                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
-                                                        if (lng > 1) {
-                                                                rtrn <- askDB(xpr)
-                                                        } 
-                                                }
-                                        } 
-                                }
-                        }
-                        xpr <- xprOrig
-                        lng <- stri_count(xpr, fixed = " ",case_insensitive = T)+1
-                        
-                        # Falling back to one - last word in expression
-                        if (nrow(rtrn) == 0) rtrn <- askDB(lastWord(xpr))
-                        
-                        # Still nothing...
-                        if (nrow(rtrn) == 0) rtrn <- askDB(inWordPredictEngine(lastWord(xpr))[[2]][1])
-                        # A nonsense last word - trying last but one.
-                        if (nrow(rtrn) == 0) rtrn <- askDB(inWordPredictEngine(lastButOneWord(xpr))[[2]][1])
-                        # .......((((
-                        if (nrow(rtrn) == 0) rtrn <- dt_words_EN[1:linesLimit,]
-                        
-                }
-                rtrn
-        } else { rtrn } # No prediction for empty strings, chinese, russian, hebrew and the rest of strange languages!
-}        
-
-inWordPredictEngine <- function(xpr) {
-        
-        rtrn = data.frame()
-        if (stri_length(xpr) > 0) {
-                ## Use case #1 - a word is in process of typing - so to short, we could probably recognize it by the stem
-                rtrn <- dt_words_EN %>% filter(words_EN %like% paste("^",xpr, sep = ""))
-                
-                ## Use case #2 - the word is probably too long. Reducing in steps up to length wordLengthLimit 
-                if (nrow(rtrn) == 0) {
-                        while(stri_length(xpr) >= wordLengthLimit && nrow(rtrn) == 0) {
-                                xpr <- gsub(".$","",xpr)
-                                xpr
-                                rtrn <- na.omit(dt_words_EN[xpr,])
-                                rtrn
-                        }
-                        
-                        # Absolutely nothing found  -> simply give the list of the most top-[limit]
-                        if (nrow(rtrn) == 0){
-                                rtrn <- dt_words_EN[1:linesLimit,] # Yes, we can! Even, if these are the trivials.
-                        }
-                }
-        }
-        else {
-                rtrn <- dt_words_EN[1:linesLimit,] # Yes, we can! Even, if these are the trivials.
-        }
-        rtrn
-}
-
-
-## Short engine tests
-
-## Testing the prediciton prototype, 
-## We are probably not perfect yet ;-)
-
-#Normal case
-system.time(rslt <- predictEngine("red"))
-head(rslt)
-
-#Normal case
-system.time(rslt <- predictEngine("it was"))
-head(rslt)
-
-# Predictor not found in DB - shortening the second word
-system.time(rslt <- predictEngine("it readd"))
-head(rslt)
-
-# Control for the second part
-system.time(rslt <- predictEngine("readdd"))
-head(rslt)
-
-# Predictor ends with punctuation mark - nothing to be returned
-system.time(rslt <- predictEngine("red river ,"))
-head(rslt)
-
-# After foreign words no suggestions delivered
-system.time(rslt <- predictEngine("red уменьшению"))
-head(rslt)
-
-paste("Exec.time", as.integer(Sys.time()) - START, "sec.")
 
