@@ -4,20 +4,25 @@
 rm(list = ls())
 invisible(gc())
 
+homedir <- "/home/d/R-Work/CapstoneProject"
+setwd(homedir)
+source("functions.R")
+
 suppressMessages(library(tm))
 library(stringi)
 suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
 library(tau)
+library(parallel)
 
 
 START <- as.integer(Sys.time())
 
 ## Modelling relevant configuration
-dictToLower <- TRUE
+dictToLower <- FALSE
 dictToTrimmComb <- TRUE
 
-docsToLower <- dictToLower
+docsToLower <- TRUE
 docsToStem  <- FALSE
 docsToTrimmComb <- dictToTrimmComb
 
@@ -28,7 +33,6 @@ prob_train <- .15  #train volume in proportion to all corpus lines
 
 tmst <- as.integer(Sys.time())
 ## Technical configuration
-homedir <- "/home/d/R-Work/CapstoneProject"
 datadir <- file.path(homedir,"data")
 tmpdir <- paste(homedir,"/tmp",prob_train,"_",tmst, sep = "")
 endicts <- file.path(datadir,"en_dicts")
@@ -38,8 +42,6 @@ projectcorpFile <- rev(stri_split(str = projectcorpURL,fixed = "/")[[1]])[1]
 result_file <- file.path(tmpdir,"results.log")
 
 ## Downloading and unziping the data
-
-setwd(homedir)
 
 if (!dir.exists(file.path(tmpdir,"before"))) {
         dir.create(file.path(tmpdir,"before"),recursive = T)
@@ -95,6 +97,7 @@ writeCorpus(x = trainCorpus,path = file.path(tmpdir,"before"))
 
 invisible(gc())
 
+
 ## Building reference word lists,echo=FALSE, cache=F, split= F}
 
 if (!dir.exists(file.path(tmpdir,"before"))) {
@@ -125,15 +128,15 @@ system(paste("grep -vh '^ ' /usr/share/wordnet/index*| cut -f1 -d' '| sort -u > 
 
 ## We use the SCOWL english word lists as a concurrent english word list
 
-scowlgz <- file.path(scowldir,"scowl-2016.06.26.tar.gz")
-
-if (!file.exists(file.path(tmpdir,"scowl-words.txt"))) {
-        if (!file.exists(scowlgz))
-                download.file(url = "http://vorboss.dl.sourceforge.net/project/wordlist/SCOWL/2016.06.26/scowl-2016.06.26.tar.gz",
-                              destfile = scowlgz, mode = "wb")
-        untar(tarfile = scowlgz, exdir = scowldir)
-        system(paste("cat ",scowldir,"/*/final/*| sort -u > ",endicts,"/dict_scowl.txt","",sep=""))
-}
+# scowlgz <- file.path(scowldir,"scowl-2016.06.26.tar.gz")
+# 
+# if (!file.exists(file.path(tmpdir,"scowl-words.txt"))) {
+#         if (!file.exists(scowlgz))
+#                 download.file(url = "http://vorboss.dl.sourceforge.net/project/wordlist/SCOWL/2016.06.26/scowl-2016.06.26.tar.gz",
+#                               destfile = scowlgz, mode = "wb")
+#         untar(tarfile = scowlgz, exdir = scowldir)
+#         system(paste("cat ",scowldir,"/*/final/*| sort -u > ",endicts,"/dict_scowl.txt","",sep=""))
+# }
 
 dictCorp <- Corpus(DirSource(endicts, encoding = "UTF-8", pattern = ".*.txt"))
 
@@ -152,7 +155,7 @@ dictCorp <- tm_map(dictCorp, stripWhitespace)
 if (dictToTrimmComb) { dictCorp <- tm_map(dictCorp, content_transformer(trimmCombinations)) }
 
 dictCorp <- tm_map(dictCorp, content_transformer(unique)) 
-words_EN <- unique(c(dictCorp[[1]]$content,dictCorp[[2]]$content))
+words_EN <- unique(c(dictCorp[[1]]$content))
 
 ## Currently not used, time consuming
 # dictCorp <- tm_map(dictCorp, stemDocument)
@@ -167,6 +170,7 @@ invisible(gc())
 
 dt_words_EN <- data.table(freq = rep(-1,length(words_EN)), words_EN)
 setkey(dt_words_EN, "words_EN")
+save(dt_words_EN,"finalDB/dt_words_EN.Rdata")
 #dt_stems_EN <- data.table(stems_EN)
 #setkey(dt_stems_EN,"stems_EN")
 #rm(list=c("words_EN","stems_EN"))
@@ -182,7 +186,7 @@ dir(file.path(datadir,"en_dicts"))
 
 ## Building tidy data,echo=FALSE, cache=F}
 
-wordsnogo <- c("the","a","an")
+# For function definitions see functions.R
 
 trList <- list(
         removeNumbers,
@@ -195,16 +199,6 @@ rm(trainCorpus)
 invisible(gc())
 
 
-# Make reasonable substitutions for UTF-8 expressions and chars
-
-subsetUTFAnalogs <- function(str) {
-        # Throwing away unconventional quotes as well as exprs. like "°" or "€"
-        x <- gsub("\xe2\x80\x9c|\xe2\x80\x9d|\xe2\x80\xa6|\xe2\x80\x93|\xe2\x82\xac|\xc2\xba|\xc2\xbd|\xe2\x99\xa5","", x = str, perl = T,fixed = F)
-        x <- gsub("\xe2\x80\x99|\xe2\x80\x98","'", x , perl = T, fixed = F)
-        x <- gsub("\xe2\x80\x94", "-", x)
-        x
-}
-
 for (comp in seq_along(workTrainCorpus)) {
         workTrainCorpus[[comp]]$content <- subsetUTFAnalogs(workTrainCorpus[[comp]]$content)
 }
@@ -213,115 +207,24 @@ if (docsToLower) workTrainCorpus <- tm_map(workTrainCorpus, content_transformer(
 
 workTrainCorpus <- tm_map(workTrainCorpus, removeWords, wordsnogo)
 
-filterAwayNonLatinLines <- function(lins) {
-        mask <- Encoding(lins) == "UTF-8" | grepl("\xe3|\xe4|\xe5|\xe6|\xe7|\xe8|\xe9|\xd0",x = lins, useBytes = T) 
-        lins[!mask]
-}
-
 workTrainCorpus <- tm_map(workTrainCorpus, content_transformer(filterAwayNonLatinLines))
 
-punctmarks <- "[,.!?]"
-vectPM <- c(".",",","!","?")
-punctmarkGroup <- "([,.!?])"
-
-## All printable ASCII characters
-## gsub("[\x21-\x7e]","","abZ{")
-
-treatPunctuations <- function(x) {
-        
-        # Removing  " - "
-        x <- gsub("[[:blank:]]+[-]+[[:blank:]]+"," ",x)
-        
-        # Removing all parenthesis of all kinds
-        #... sorry, smilies ;)
-        #x <- gsub("\x28\x29\x7b\x7d\x5b\x5d\x7c"," ",x)
-        
-        x <- gsub("[(]+([a-zA-Z])", ". \\2", x)
-        x <- gsub("([a-zA-Z])[.!?]*[)]+", "\\1 . ", x)
-        
-        
-        # Removing the isolated quote sequences, like "is "" hah"  -> "is hah"
-        x <- gsub("[[:blank:]]+[\x22\x27]+[[:blank:]]+", " ", x)
-        
-        # Converting the double quotes into single one in-words
-        ## sal"teen -> sal'teen
-        x <- gsub("([a-z])\"([a-z])","\\1'\\2",x)
-        
-        ## Unquoting the citation, making a separate sentence 
-        #### In the middle of the line
-        #Removing the quotes at the begining of a citation, separating with point. (""It is...)
-        x <- gsub("[[:blank:]]+[\x27\x22]+([a-zA-Z])"," . \\1",x)
-        
-        #Removing the quotes at the end of a citation,  separating with point. (was great!')
-        x <- gsub("([a-zA-Z.,!?])[\x27\x22]+[[:blank:]]+","\\1 . ",x)
-                  
-        ### At the begin of the line
-        x <- gsub("^[\x22\x27]+([^\x22\x27]*)[\x22\x27]+[[:blank:]]+", "\\1 . ", x)
-        
-        ### at the end of line
-        x <- gsub("([^\x22\x27]+)[\x22\x27]+[[:blank:]]*[.!?]*[[:blank:]]*$", " . \\1 .", x)
-        
-
-        # Substituting multiple punctuation characters at the end of the line with " ."
-        x <- gsub(paste(punctmarks,"{2,}[[:blank:]]*$",sep="")," .", x, perl = T)
-        
-        # Formating the end-of-sentence (characters ".!?")
-        x <- gsub(punctmarkGroup," \\1 ", x, perl = T)
-        
-        # Last resort '" OR ''
-        # x <- gsub("(^[\x22\x27]+|[\x22\x27]+$)","",x)
-        x <- gsub("[\x22\x27]+","",x)
-        
-        
-        # Anyway, the point at the end of the line
-        x <- sub("$"," .",x)
-        x
-}
-# # English words may begin with letters, numbers ("25th") or lately "#" (as a hashtag) and "@"
-# # ... and consist of letters, numbers, points ("US.","s.u.v.") and "'"
-#       x <- gsub("[[:blank:]]+[^a-zA-Z0-9#@]+([#@]+[a-zA-Z0-9]+[a-zA-Z0-9\x27]+)", " \\1", x)
-# 
-# # English words may end with letters, numbers 
-# # ... and consist of letters, numbers ("b-52"), points ("US.","s.u.v.") and "'"
-#       x <- gsub("([a-zA-Z.0-9\x27])[^a-zA-Z.0-9\x27[:blank:]][[:blank:]]+", "\\1 ", x)
-
-#         # Trimming the longer sequences of punctuation characters in the middle of the line 
-#         #  x <- gsub(paste(punctmarkGroup,"{2,}",sep="")," . ", x, perl = T)
-#         
-#         # Removing the longer [_-><] sequencies in the middle of the line
-#         # x <- gsub("([_><-]{2,})"," ", x, perl = T)
-#         
-#         # Transfering the "<word><punctmark>"  into "<word> <punctmark>  "
-#         x <- gsub(paste("([^[:blank:]])",punctmarkGroup,sep=""),"\\1 \\2", x, perl = T)
-#         # Formating the end-of-sentence (characters ".!?")
-#         x <- gsub(punctmarkGroup," \\1 ", x, perl = T)
-#         # Putting "." at the end of the line (if not closed by author or before)
-#         x <- gsub("([^,.!?]) +$","\\1 .",x)
-#         # Trimming the excessive white spaces/tabs
-#         x <- gsub("[[:blank:]]{2,}"," ", x, perl = T)
-#         #Trimming the blanks et the end of line - not used as better for tokenizing
-#         #x <- gsub("[[:blank:]]*$","", x, perl = T)
-#         x
-# }
 
 for(i in seq_along(workTrainCorpus)) {
         workTrainCorpus[[i]]$content <- treatPunctuations(workTrainCorpus[[i]]$content)
 }
 
-
-
-removeNotLatinWords <- function(x) gsub("[\x21-\x7e]*[^\x20-\x7e]+[\x21-\x7e]*", "", x)
-
 for(i in seq_along(workTrainCorpus)) {
         workTrainCorpus[[i]]$content <- removeNotLatinWords(workTrainCorpus[[i]]$content)
 }
-
 
 tidyTrainCorpus <- tm_map(workTrainCorpus, stripWhitespace)
 
 writeCorpus(x = tidyTrainCorpus,path = file.path(tmpdir,"after"))
 
 save(tidyTrainCorpus,file = file.path(tmpdir,"tidyTrainCorpus.Rdata"))
+
+paste("Exe. time:",(as.integer(Sys.time()) - START)/60,"min.")
 
 rm(workTrainCorpus)
 invisible(gc())
