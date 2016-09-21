@@ -95,9 +95,6 @@ predictionEngine <- function(strg) {
         
         precondString <- function(x) {
                 
-                
-                
-                
                 ###############################################
                 
                 # Starting processing the line
@@ -140,7 +137,7 @@ predictionEngine <- function(strg) {
         }
         
         inWordPredictEngine <- function(xpr) {
-                rtrn = data.frame()
+                rtrn = data.table()
                 ## Use case #1 - a word is in process of typing, so we could probably recognize it by the stem
                 
                 rtrn <- dt_monograms %>% filter(word %like% paste("^",xpr, sep = ""))
@@ -158,17 +155,21 @@ predictionEngine <- function(strg) {
         
         makePredictions <- function(xx) {
                 
+                rtrn <- data.table()
                 limit <- 60
                 ## Line input, 
                 ## Regular aaaaa bbbbb ccccc ddddd (a..a  till d..d - regular English words)
                 
+                
                 xbkp <- xx
                 
                 askDB <- function(xx,lgth) {
+                      
                         if (!is.null(dt_bigrams) & lgth == 1) rtrn <- na.omit(dt_bigrams[xx][1:limit])
                         if (!is.null(dt_trigrams) & lgth == 2) rtrn <- na.omit(dt_trigrams[xx])
                         if (!is.null(dt_four_grams) & lgth == 3) rtrn <- na.omit(dt_four_grams[xx][1:limit])
                         if (!is.null(dt_pentagrams) & lgth == 4) rtrn <- na.omit(dt_pentagrams[xx][1:limit])
+                        rtrn
                 }
                 
                 lgth <- length(strsplit(xx, split = "[[:blank:]]")[[1]])
