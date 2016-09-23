@@ -60,8 +60,8 @@ shinyUI(
                                     selectInput('db_tri', 'Database of two-words predictors', c("small" = 3,"middle" = 2,"big" = 1)),
                                     selectInput('db_four', 'Database of three-words predictors', c("small" = 3,"middle" = 2,"big" = 1)),
                                     selectInput('db_penta', 'Database of four-words predictors', c("small" = 3,"middle" = 2,"big" = 1)),
-                                    checkboxInput('jitter', 'Something'),
-                                    submitButton("Reload")
+                                    checkboxInput('jitter', 'Something')
+                                    #submitButton("Reload")
                                 ),
                                 hr(),
                                 h3("Intelligence has its price"),

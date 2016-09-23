@@ -281,7 +281,6 @@ predictionEngine <- function(strg, shiny = FALSE) {
         rtrn <- na.omit(rtrn%>%arrange(desc(freq))%>%slice(1:maxLinesOut))$outcome
         names(rtrn) <- rtrn
     }
-    
     rtrn
     
 }
@@ -316,9 +315,9 @@ shinyServer(
                     z <- paste(input,selected)
                    
                 }
-      
-                updateSelectInput(session, 'inSelect', choices = c() )
+                
                 updateTextInput(session, 'userInput', value = z)
+                updateSelectInput(session, 'inSelect', choices = c() )
                 #input <- input$userInput
                 js$focusOnUserInput()
             }
@@ -327,7 +326,7 @@ shinyServer(
         observe({
             if(!is.null(input$userInput) && stri_length(input$userInput) > 0)   {
                 updateSelectInput(session, 'inSelect', choices = c({ predictionEngine(input$userInput, TRUE) }) )
-                isolate(input$userInput)
+               # isolate(input$userInput)
                 #js$focusOnSelectInput()
             }
         })
