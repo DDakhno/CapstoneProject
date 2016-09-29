@@ -2,7 +2,8 @@ library(data.table)
 library(dplyr)
 
 START <- as.integer(Sys.time())
-dbs <- c("DB/dt_monograms/dt_monograms.Rdata" , "DB/dt_bigrams/dt_bigrams.Rdata" , "DB/dt_trigrams/dt_trigrams.Rdata", "DB/dt_four_grams/dt_four_grams.Rdata", "DB/dt_pentagrams/dt_pentagrams.Rdata")
+#dbs <- c("DB/dt_monograms/dt_monograms.Rdata" , "DB/dt_bigrams/dt_bigrams.Rdata" , "DB/dt_trigrams/dt_trigrams.Rdata", "DB/dt_four_grams/dt_four_grams.Rdata", "DB/dt_pentagrams/dt_pentagrams.Rdata")
+dbs <- c("DB/dt_pentagrams/dt_pentagrams.Rdata")
 
 max_rank <- 150
 
@@ -18,8 +19,6 @@ myrank <- function(x) {
 }
 
 for (db in dbs) {
-    
-    db <- "DB/dt_trigrams/dt_trigrams.Rdata"
     
     print(db)
     
