@@ -170,7 +170,8 @@ invisible(gc())
 
 dt_words_EN <- data.table(freq = rep(-1,length(words_EN)), words_EN)
 setkey(dt_words_EN, "words_EN")
-save(dt_words_EN,"finalDB/dt_words_EN.Rdata")
+setwd(homedir)
+save(dt_words_EN, file = "finalDB/dt_words_EN.Rdata")
 #dt_stems_EN <- data.table(stems_EN)
 #setkey(dt_stems_EN,"stems_EN")
 #rm(list=c("words_EN","stems_EN"))
@@ -271,10 +272,9 @@ bigrams <- bigrams[!mask]
 # mask <- grepl("['*+]",names(bigrams))
 # bigrams <- bigrams[!mask]
 
-dt_bigrams <- data.table(freq = bigrams, 
-                         predictor = gsub(" [^ ]*$","",names(bigrams)), 
-                         outcome = gsub("^.* ","",names(bigrams))
-)
+dt_bigrams <- data.table( predictor = gsub(" [^ ]*$","",names(bigrams)), 
+                         outcome = gsub("^.* ","",names(bigrams)),
+                         freq = bigrams)
 setkey(dt_bigrams,predictor)
 
 save(bigrams, file = file.path(tmpdir,"bigrams.Rdata"))
@@ -299,10 +299,9 @@ trigrams <- trigrams[!mask]
 # mask <- grepl("['*+]",names(trigrams))
 # trigrams <- trigrams[!mask]
 
-dt_trigrams <- data.table(freq = trigrams, 
-                          predictor = gsub(" [^ ]*$","",names(trigrams)), 
-                          outcome = gsub("^.* ","",names(trigrams))
-)
+dt_trigrams <- data.table(predictor = gsub(" [^ ]*$","",names(trigrams)), 
+                          outcome = gsub("^.* ","",names(trigrams)),
+                          freq = trigrams)
 setkey(dt_trigrams,predictor)
 save(trigrams, file = file.path(tmpdir,"trigrams.Rdata"))
 save(dt_trigrams, file = file.path(tmpdir,"dt_trigrams.Rdata"))
@@ -321,14 +320,13 @@ four_grams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$conte
                         tidyTrainCorpus[[3]]$content), method = "string", split = " ", n = 4L, decreasing = T)
 four_grams <- unclass(four_grams)
 
-#Selecting only the wordpairs without separators and "'"
+#Selecting only the word sequences without separators and "'"
 mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(four_grams))
 four_grams <- four_grams[!mask]
 
-dt_four_grams <- data.table(freq = four_grams, 
-                            predictor = gsub(" [^ ]*$","",names(four_grams)), 
-                            outcome = gsub("^.* ","",names(four_grams))
-)
+dt_four_grams <- data.table(predictor = gsub(" [^ ]*$","",names(four_grams)), 
+                            outcome = gsub("^.* ","",names(four_grams)),
+                            freq = four_grams)
 setkey(dt_four_grams, predictor)
 
 save(four_grams, file = file.path(tmpdir,"four_grams.Rdata"))
@@ -346,14 +344,13 @@ pentagrams <- textcnt(c(tidyTrainCorpus[[1]]$content, tidyTrainCorpus[[2]]$conte
                         tidyTrainCorpus[[3]]$content), method = "string", split = " ", n = 5L, decreasing = T)
 pentagrams <- unclass(pentagrams)
 
-#Selecting only the wordpairs without separators and "'"
+#Selecting only the wordp sequences without separators and "'"
 mask <- grepl("(^[.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]|[[:blank:]][.,!?]+[[:blank:]]*$)",names(pentagrams))
 pentagrams <- pentagrams[!mask]
 
-dt_pentagrams <- data.table(freq = pentagrams, 
-                            predictor = gsub(" [^ ]*$","",names(pentagrams)), 
-                            outcome = gsub("^.* ","",names(pentagrams))
-)
+dt_pentagrams <- data.table( predictor = gsub(" [^ ]*$","",names(pentagrams)), 
+                            outcome = gsub("^.* ","",names(pentagrams)),
+                            freq = pentagrams)
 
 setkey(dt_pentagrams,predictor)
 
@@ -432,108 +429,3 @@ for (x in c("dt_bigrams","dt_trigrams","dt_four_grams","dt_pentagrams")) trimDat
 
 
 paste("Exe. time:",(as.integer(Sys.time()) - START)/60,"min.")
-
-
-#         # Concetps and algorithms for prediction model.
-#         
-#         The most simple prediction model at this point is using of the calculated and raked n-grams frequencies for generation 
-# of the suggestions for the next word. There are some practical questions to be answered building the feasible practical 
-# solution.
-# 
-# 
-# 1. We will give the ranked by frequency lists of bi-, tri- and four-grams a trial as prediction mechanism.
-# 2. All the technical routines for selection of the lists are as described in the source code (hidden) above.
-# 2. We will probably need not only the in-line-prediction (word by word), but the in-word-prediction as well (predicting 
-#                                                                                                              the ending of the word being just typed).
-# 2. We need some fallback mechanisms for missing predictors in database, typos and so on.
-# 1. The controversy between bias and variance of statistical model is ubiquitous. In our case we have data with 
-# a maximal variance. It is a vivid mapping of the test data set, but probably some to vivid. That should be kept in 
-# mind for advanced modeling.
-# 2. The next omnipresent controversy is that between the statistical performance of the model and hardware performance of 
-# implementation.
-# 3. For the sake of technical performance (execution times meant) I have packed the word lists into indexed data tables, 
-# each for a kind of n-grams.
-# 3. The other facet of technical performance is memory consumption of the databases. It is definitely the matter for further 
-# research. 
-# 3. It is not only the capacity of hardware, limiting the depth of the prediction, but the willingness of the end user to scroll 
-# through the suggestion lists. Already at this stage it makes no sense to plan delivering all `r max(bigrams)` variants for the 
-# predictor "`r names(bigrams)[1]`" to the end user.
-# 4. The limitations put by hardware and user interfaces of the gadgets like smartphone reinforce the considerations above.
-# 5. We need for development much enough resources, to produce  the parsimonious and efficient end product. 
-# 
-# 
-
-
-
-
-
-
-## Evaluating the possible memory savings through the limit of 30 words per predictor
-## Maximal about 12% for the anyway smaller bigrams.
-
-## Bigrams
-# tb <- table(gsub(" [^ ]*$","",names(bigrams)))
-# mask <- tb <= 30
-# sum(!mask)/length(mask)
-# rm(mask)
-# 
-# ## Trigrams
-# tb <- table(gsub(" [^ ]*$","",names(trigrams)))
-# mask <- tb <= 30
-# sum(!mask)/length(mask)
-# rm(mask)
-# 
-# ## Four-grams
-# tb <- table(gsub(" [^ ]*$","",names(four_grams)))
-# mask <- tb <= 30
-# sum(!mask)/length(mask)
-
-
-## Postponed as possible memory consumption optimizer
-# ## Frequency of bigram predictors in the trigrams
-# tb <- table(gsub(" [^ ]*$","",names(trigrams)))
-# 
-# mask <- tb > limit
-# trimmed_trigramms <- trigrams[!mask]
-# 
-# for (pred in names(tb[mask])) {
-#         print(pred)
-#         #Using vector
-#         #mask <- grepl(paste("^",pred,sep = ""), names(trigrams))
-#        # trimmed_trigramms <-  c(trimmed_trigramms,trigrams[mask][1:limit])
-#         # Using data table
-#         trimmed_trigramms <-  c(trimmed_trigramms,dt_trigrams[pred,][1:limit])
-# }
-# dt_trigrams <- data.table(freq = trigrams, 
-# predictor = gsub(" [^ ]*$","",names(trigrams)), 
-# outcome = gsub("^.* ","",names(trigrams))
-# )
-# setkey(dt_trigrams,predictor)
-# and so on...
-
-## Reorganize the dt_words_EN
-# invisible(gc())
-# 
-# used_words <- sort(wordFreqDescNorm[dt_words_EN[names(wordFreqDescNorm),]$words_EN], decreasing = T)
-# rest_words <- dt_words_EN[!names(wordFreqDescNorm),]$words_EN
-# dummies <- rep(0,length(rest_words))
-# names(dummies) <- rest_words
-# all_words <- c(used_words,dummies)
-# nms <- names(all_words)
-# 
-# dt_words_EN <- data.table(freq = all_words, words_EN = nms)
-# #dt_words_EN <- dt_words_EN %>% arrange(freq)
-# setkey(dt_words_EN, words_EN)
-
-# rm(wordFreqDescNorm)
-# rm(used_words)
-# rm(dummies)
-# rm(rest_words)
-# rm(all_words)
-#rm(dt_words_tmp)
-# invisible(gc())
-
-
-
-## Possible savings through limiting of the redundance of the predictors to max. top 30
-

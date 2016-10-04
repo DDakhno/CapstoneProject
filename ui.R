@@ -12,14 +12,16 @@ library(shinyjs)
 library(bootstrap)
 library(V8)
 
+useShinyjs()
+focusOnUserInput <- "shinyjs.focusOnUserInput = function(){document.getElementById('userInput').focus();}"
+extendShinyjs(text = focusOnUserInput)
+
 fluidPage(
-    useShinyjs(),
+    
     theme = "bootstrap.cerulean.css",
     includeCSS("www/bootstrap.cerulean.min.css"),
     
-    focusOnUserInput <- "shinyjs.focusOnUserInput = function(){document.getElementById('userInput').focus();}",
     
-    extendShinyjs(text = focusOnUserInput),
     
     # Application title
     tabsetPanel(
@@ -85,20 +87,20 @@ fluidPage(
                             wellPanel(
                                 fluidRow(
                                     column(6,
-                                           radioButtons(inputId = 'db_mono', 'List of used words',
+                                           radioButtons(inputId = 'db_mono', 'DB used words',
                                                         
-                                                        choices = c("small" = 2,"big" = 1),
-                                                        selected = 2
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                                        selected = 3
                                            ),
                                            
                                            radioButtons(inputId = 'db_bi', 'DB one-word predictors',
                                                         choices = c("small" = 3,"middle" = 2,"big" = 1),
-                                                        selected = 2
+                                                        selected = 3
                                                         
                                            ),
                                            radioButtons(inputId = 'db_tri', 'DB two-words predictors',
                                                         choices = c("small" = 3,"middle" = 2,"big" = 1),
-                                                        selected = 2
+                                                        selected = 3
                                            )
                                     ),
                                     column(6,
@@ -106,12 +108,12 @@ fluidPage(
                                            radioButtons(inputId = 'db_four', 'DB three-words predictors',
                                                         choices = c("small" = 3,"middle" = 2,"big" = 1),
                                                         
-                                                        selected = 2
+                                                        selected = 3
                                            ),
                                            radioButtons(inputId = 'db_penta', 'DB four-words predictors',
                                                         
                                                         choices = c("small" = 3,"middle" = 2,"big" = 1),
-                                                        selected = 2
+                                                        selected = 3
                                            ),
                                            h6("-----------------\
                                               "),

@@ -1,11 +1,6 @@
-#
-# This is the server logic of a Shiny web application. You can run the 
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-# 
-#    http://shiny.rstudio.com/
-#
+#!/usr/bin/Rscript
+
+###### Benchmarking engine ################################################################
 
 rm(list=ls())
 library(shiny)
@@ -16,8 +11,11 @@ library(dplyr)
 library(stringi)
 library(pryr)
 
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
 source("functions.R")
 
+dbdir <- "finalDB"
+benchdir <- "bench"
 
 punctmarks <- "[.!?]"
 vectPM <- c(".","!","?")
@@ -45,6 +43,9 @@ db_loaded <- data.table()
 reloadDBs <- function(db_mono = 3, db_bi = 3, db_tri = 3, db_four = 3, db_penta = 3, db_scowl=1, db_dir = "finalDB") {
     
     db_loaded <- "Waiting for reload data banks!"
+    
+    rm("dt_bigrams","dt_four_grams","dt_monograms","dt_trigrams", "dt_pentagrams", envir = envData)
+    gc()
     
     db_mono <- as.integer(db_mono)
     db_bi <- as.integer(db_bi)
@@ -94,11 +95,6 @@ reloadDBs <- function(db_mono = 3, db_bi = 3, db_tri = 3, db_four = 3, db_penta 
     db_loaded
     
 }
-
-db_loaded <- reloadDBs()
-
-
-
 
 removeWordsNogo <- function(lin,wng) {
     tmp <- strsplit(lin, split ="[[:blank:]]+" )[[1]]
@@ -409,116 +405,130 @@ wrapPE <- function(strg, shiny = FALSE) {
 }
 
 
-useShinyjs()
 
-questions <- readLines("Questions.txt")
-assumptions <- readLines("Assumptions.txt")
-preproc_steps <- readLines("Preprocessing.txt")
-eda_steps <- readLines("EDA.txt")
-cocepts_pred <- readLines("Concepts.txt")
+setwd(file.path("/home/d/R-Work/CapstoneProject",benchdir))
 
-# Define server logic required to draw a histogram
-shinyServer(function(input, output, session) {
+system("mawk '{ print $1 > \"freq.txt\"; print $2,$3,$4,$5 >\"predictor.txt\" ; print $NF >\"outcome.txt\" }' w5_.txt")
+
+predictor <- readLines("predictor.txt")
+outcome <- readLines("outcome.txt")
+freq <- readLines("freq.txt")
+
+all_results <- data.table(Mbyte="", nr.mono="",nr.bi="",nr.tri="",nr.four="",nr.penta="",accuracy="",by_ranking="",mean_time="",median_time="",sd_time="")
+all_results <- all_results[0]
+
+attempts <- 1000
+
+
+dt_test <- data.table(predictor, outcome, freq)
+setkey(dt_test, predictor)
+
+lgt <- nrow(dt_test)
+testindx <- sample(x = lgt, size = attempts)
+
+benchIt <- function() {   
     
-    output$questions <- renderUI(HTML(paste(questions, collapse = '<br/>')))
-    output$assumptions <- renderUI(HTML(paste(assumptions, collapse = '<br/>')))
-    output$preprocessing <- renderUI(HTML(paste(preproc_steps, collapse = '<br/>')))
-    output$eda <- renderUI(HTML(paste(eda_steps, collapse = '<br/>')))
-    output$concepts <- renderUI(HTML(paste(cocepts_pred, collapse = '<br/>')))
+    setwd(file.path("/home/d/R-Work/CapstoneProject",benchdir))
+    
+    mbyte <- (object.size(envData$dt_monogram)+
+                  object.size(envData$dt_bigrams)+
+                  object.size(envData$dt_trigrams)+
+                  object.size(envData$dt_four_grams)+
+                  object.size(envData$dt_pentagrams))/1024/1024
+    
+    mbyte <- as.character(round(mbyte,2))
+    
+    nr_mono <- nrow(envData$dt_monograms)
+    nr_bi <- nrow(envData$dt_bigrams)
+    nr_tri <- nrow(envData$dt_trigrams)
+    nr_four <- nrow(envData$dt_four_grams)
+    nr_penta <- nrow(envData$dt_pentagrams)
     
     
+   # print(testindx)
     
-    output$memSize <- renderTable(db_loaded)
+    dt_results <- data.table( predictor="", accuracy="", by_rank="", nrpred="", exectime="")
     
+    cnt <- 1
     
-    
-    sI <- sessionInfo()
-    
-    output$generalInfo <- renderTable({
-        c(paste("Platform", sI$platform),
-          paste("Version R", sI$R.version$version.string),
-          paste("Locale", sI$locale),
-          paste("OS running", sI$running)
-        )
-    })
-    
-    reportConsumption <- function() {
-        cons <- system("echo 'Operational system';  uname -a; echo 'Uptime'; uptime; echo  'Memory consumption, MByte'; free -m", intern = T)
-        output$consumption <- renderTable({
-            cons
-        })
+    for (i in testindx) {
+        
+        pred <- dt_test[i]$predictor
+        
+        expouts <- (dt_test[pred] %>% arrange(desc(freq)))$outcome
+        expouts <- expouts[! expouts %in% c("a","an","the")]
+        
+        if (length(expouts) > 0) {
+            
+            print(paste(cnt,length(expouts),"   ",pred, collapse = " "))
+            cnt <- cnt + 1
+            
+            outcomes <- wrapPE(paste(pred," ",collapse=""))
+            
+            exectime <- outcomes[[3]][1]
+            outcomes <- outcomes[[1]]$outcome
+            
+            nrout <- length(outcomes)
+            
+            coverage <- round(sum(outcomes %in% expouts)/length(expouts),2)
+            mask <- outcomes %in% expouts
+            
+            outcomes <- outcomes[mask]
+            mask <- expouts %in% outcomes
+            expouts <- expouts[mask]
+            by_ranking <- sum(outcomes == expouts)/length(outcomes)
+            if (is.na(by_ranking)) by_ranking <- 0
+            by_ranking <- round(by_ranking,2)
+            
+            # print("coverage")
+            # print(coverage)
+            # print("by_ranking")
+            # print(by_ranking)
+            
+            dt_results <- rbind(dt_results,list(pred, coverage, by_ranking, nrout, exectime))
+        }
     }
     
-    reportConsumption()
     
-    pingShiny <- function() {
-        if (sI$running %like% "Windows") { 
-            ping = "ping -n 10 ddakhno.shinyapps.io"
-        } else {
-            ping = "ping -c 10 -i .2 ddakhno.shinyapps.io"
-        }
-        rtt <- system(ping,intern = T)
-        gsub("/"," / ",rtt[length(rtt)])
-    }
+    dt_results <- dt_results[2:nrow(dt_results)]
+    dt_results$accuracy <- as.numeric(dt_results$accuracy)
+    dt_results$by_rank <- as.numeric(dt_results$by_rank)
+    dt_results$nrpred <- as.numeric(dt_results$nrpred)
+    dt_results$exectime <- as.numeric(dt_results$exectime)
     
-    rtt <- pingShiny()
-    output$roundTrip <- renderText(rtt)                         
-    
-    observe({
-        if(!is.null(input$inSelect)){
-            selected <- input$inSelect
-            input <- input$userInput
-            
-            z <- ""
-            if (!grepl("[[:blank:]]+$",input)) {
-                # Exchanging the last incomplete word through user select
-                z <- paste(gsub("[[:blank:]]+[^[:blank:]]+$","",input),selected)
-            } else  {
-                # Adding one of proposals to the input line
-                # The input line ends with [.!?] - first letter of select to upper
-                if (grepl("[.!?][[:blank:]]*$",input)) {
-                    frst <- toupper(gsub("^(.).*$", "\\1",selected))
-                    selected <- gsub("^.",frst,selected)
-                }    
-                z <- paste(input,selected)
-                
-            }
-            
-            updateTextInput(session, 'userInput', value = z)
-            updateSelectInput(session, 'inSelect', choices = c() )
-            #input <- input$userInput
-            js$focusOnUserInput()
-        }
-    })
-    
-    
-    observe({
-        if(!is.null(input$userInput) && stri_length(input$userInput) > 0)   {
-            rtrn <- wrapPE(input$userInput, TRUE)
-            updateSelectInput(session, 'inSelect', choices = c({ rtrn[[1]] }) )
-            updateSelectInput(session, 'LOG', choices = rtrn[[2]] )
-            output$execTime <- renderText(rtrn[[3]])
-        }
-    })
-    
-    
-    observeEvent(
-        input$reloadDB, {output$memSize <- renderTable( reloadDBs(input$db_mono,input$db_bi, input$db_tri, input$db_four, input$db_penta))
-        }
-    )
-    
-    observeEvent(
-        input$pingShiny, { rtt <- pingShiny()
-        output$roundTrip <- renderText(rtt)
-        }
-    )
-    
-    observeEvent(
-        input$saveLog, {
-            if(identical(tmpEnv$LOG, c(""))) { tmpEnv$LOG = "empty log" }
-            fil <- file.choose()
-            writeLines(text = c(tmpEnv$LOG,rtrn[[3]]), con = fil)
-        }
-    )
-})
+    all_results <<- rbind(all_results, list(mbyte, nr_mono,nr_bi,nr_tri,nr_four,nr_penta,mean(dt_results$accuracy),mean(dt_results$by_rank),
+                                                         round(mean(dt_results$exectime),4), round(median(dt_results$exectime),4), 
+                                                         round(sd(dt_results$exectime),6)))
+    print(all_results)
+    setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+    save(all_results, file="BenchResults.Rdata")
+}
+
+
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+dtr <- reloadDBs(3,3,3,3,3)
+
+benchIt()
+
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+dtr <- reloadDBs(2,2,2,2,2)
+
+benchIt()
+
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+dtr <- reloadDBs(1,1,1,1,1)
+
+benchIt()
+
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+dtr <- reloadDBs(3,3,2,1,1)
+
+benchIt()
+
+setwd("/home/d/R-Work/CapstoneProject/JHU_Data_Science_Capstone_Project")
+dtr <- reloadDBs(1,1,2,3,3)
+
+benchIt()
+
+print(all_results)
 

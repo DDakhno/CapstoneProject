@@ -9,8 +9,8 @@ treatPunctuations <- function(x) {
         
         # Removing  " - "
         x <- gsub("[[:blank:]]+[-]+[[:blank:]]+"," ",x)
-        # Removing "..."
         
+        # Removing "..."
         x <- gsub("[.][.][.]"," . ",x)
         
         # Removing all parenthesis of all kinds
@@ -27,6 +27,10 @@ treatPunctuations <- function(x) {
         # Converting the double quotes into single one in-words
         ## sal"teen -> sal'teen
         x <- gsub("([a-z])\"([a-z])","\\1'\\2",x)
+        
+        # Removing the ":" or ";" at the end of words
+        x <- gsub("([a-z])[:;] ","\\1 ",x)
+        x <- gsub("([a-z])[:;]$","\\1",x)
         
         ## Unquoting the citation, making a separate sentence 
         #### In the middle of the line
