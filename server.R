@@ -24,7 +24,7 @@ vectPM <- c(".","!","?")
 punctmarkGroup <- "([.!?])"
 wordsnogo <- c("the","a","an")
 
-maxLinesOut <- 60
+maxLinesOut <- 100
 inWordLowLimit <- 3
 maxWordLength <- 35  #Max. length of single word in Wordnet DB 33
 
@@ -46,19 +46,28 @@ confEnv$db_default <- list(dt_monograms = 3 , dt_bigrams = 3, dt_trigrams = 3, d
 confEnv$db_eq <- c("dt_monograms"="List of used words", "dt_bigrams" = "One-word predictors", "dt_trigrams" = "Two-word predictors", 
                    "dt_four_grams" =  "Three-word predictors", "dt_pentagrams" =  "Four-word predictors", "dt_scowl" = "Reference word list")
 
+tmpEnv$lastWord <- ""
+tmpEnv$cachedOutcomes <- list()
+tmpEnv$cachedExp <- ""
+tmpEnv$cachedRtrn <- data.table(predictor = "", outcome="", freq=1)[0]
+
 reloadDBs <- function(...) {
     
     db_requested <- list(...)
     db_requested <- lapply(db_requested, as.numeric)
     
-    #print("Requested")
-    #print(db_requested)
+    # print("Requested")
+    # print(unlist(db_requested))
+    # 
+    # print("confEnv$db_loaded")
+    # print(unlist(confEnv$db_loaded))
     
     on_load <- list()
     dbfiles <- grep("^d[bt]_", dir(db_dir), value=T)
     
     if (length(db_requested) == 0) {
         on_load <- confEnv$db_default     #Initial request with no parameter, load all DB in default set up.
+        
     } else {
         for (db in names(db_requested)) {
             if (length(confEnv$db_loaded) != 0 && db %in% names(confEnv$db_loaded) && db_requested[[db]] != confEnv$db_loaded[[db]]) { # DB already loaded, but the other size - only then reload
@@ -70,8 +79,6 @@ reloadDBs <- function(...) {
         }
     }
     
-    #print("On-load")
-    #print(on_load)
     
     for(db in names(on_load)){
         
@@ -88,7 +95,7 @@ reloadDBs <- function(...) {
         }
     }
     
-    rm(db_joined)
+    
     invisible(gc())
     
     dtabs <- sizes <- nrs <- c()
@@ -158,8 +165,9 @@ precondString <- function(x) {
     x <- tolower(x)
     
     #Remove articles
-    
-    x <- removeWordsNogo(x,wordsnogo)
+    if (endsWithArticle) {
+        x <- removeWordsNogo(x,wordsnogo)
+    }
     
     x <- subsetUTFAnalogs(x)
     
@@ -209,63 +217,102 @@ inWordPredictEngine <- function(xpr) {
     ## Use case #1 - a word is in process of typing, so we could probably recognize it
     
     prevWords <- predPrev <-  NULL
+    
     if (grepl(" ",xpr)) {
-        prevWords <- gsub(" [^ ]+$","",xpr)
+        prevWords <- gsub(" [^[:blank:]]+$","",xpr)
         lastWd <- gsub("^.* ","",xpr)
     } else {
         lastWd <- xpr
     }
     
-    # Propositions for words at least one letter longer than the last (incomplete?) word
-    toLog("....Searching for words starting with",lastWd)
-    rtrn <- as.data.table(envData$dt_monograms %>% filter(outcome %like% paste("^",lastWd,".", sep = ""))%>%arrange(desc(freq)))
+    finish <- FALSE
     
-    if(nrow(rtrn) > 0) {
-        toLog(paste("....Found",nrow(rtrn),"suggestions."))
-        rtrn_sorted <- TRUE
-    } else {
-        toLog(paste(".....No suggestions found."))
+    if (stri_length(lastWd) < inWordLowLimit) {
+        toLog("....Last incomplete word to short, waiting for further input.")
+        finish <- TRUE
     }
     
-    
-    
-    # More words than one in the line
-    # Preceding expression counts - the possible variants are pushed to top!
-    
-    if (! is.null(prevWords) && nrow(rtrn) > 0) { 
+    if (! finish) { 
         
-        toLog("....More than one word in search expression. Preceding expression counts, possible variants are pushed to top.")
+        # Shortcut for search in the cached suggestions
+        print(tmpEnv$cachedOutcomes)
         
-        allcand <- rtrn$outcome
-        predPrev <- as.data.table(makePredictions(prevWords, iwp = FALSE))
-        if(nrow(predPrev) > 0) {
-            favorits <- (predPrev%>%filter(outcome %like% paste("^",lastWd,".",sep="")))$outcome
-        }
-        if (length(favorits) > 0) {
-            tmp <- data.table(rbind(predPrev[outcome %in% favorits,])) 
-            toLog("......Filtering out the suggestions, dont matching the last word.")
+        if(length(tmpEnv$cachedOutcomes) > 0 & lastWd %like% tmpEnv$lastWord ) { 
+            toLog("..In-word prediction, looking into the cached result of the last look-up.")
+            outcomes <- tmpEnv$cachedOutcomes[names(tmpEnv$cachedOutcomes) %like% paste("^",lastWd,".", sep = "")]
+            if (length(outcomes) > 0){
+                toLog(paste("....Matching outcomes found in cache, returning.",length(outcomes)))
+            } else { toLog(paste("....Nothing  found in cache, going further.")) }
+            tmpEnv$cachedOutcomes <- outcomes
+            tmpEnv$lastWord <- lastWd
             
-            rtrn <- as.data.table(tmp)
-            names(rtrn) <- c("predictor","outcome","freq")
-        }         
-        suppressWarnings(rm(allcand,predPrev,favorits,tmp))
+            
+            if(is.null(prevWords)) prevWords <- NA
+            if (length(outcomes) > 0){
+                rtrn <- data.table(predictor=rep(prevWords, length(outcomes)), outcome = outcomes, freq = seq(length(outcomes),1))
+            } else {
+                rtrn <- data.table(predictor="predictor", outcome = "outcomes", freq = 1)[0]
+            }
+            
+            
+            finish <- TRUE
+            rtrn_sorted <- TRUE
+        }
+    }
+    
+    if (! finish) {
+        # Propositions for words at least one letter longer than the last (incomplete?) word
+        toLog("....Searching for words starting with",lastWd)
+        rtrn <- as.data.table(envData$dt_monograms %>% filter(outcome %like% paste("^",lastWd,".", sep = ""))%>%arrange(desc(freq)))
+        tmpEnv$lastWord <- lastWd
+        tmpEnv$cachedOutcomes <- rtrn$outcome
         
+        if(nrow(rtrn) > 0) {
+            toLog(paste("....Found",nrow(rtrn),"suggestions."))
+            rtrn_sorted <- TRUE
+        } else {
+            toLog(paste(".....No suggestions found."))
+        }
+        
+        
+        
+        # More words than one in the line
+        # Preceding expression counts - the possible variants are pushed to top!
+        
+        if (! is.null(prevWords) && nrow(rtrn) > 0) { 
+            
+            toLog("....More than one word in search expression. Preceding expression counts, possible variants are pushed to top.")
+            
+            allcand <- rtrn$outcome
+            predPrev <- as.data.table(nextWordPrediction(prevWords, iwp = FALSE))
+            if(nrow(predPrev) > 0) {
+                favorits <- (predPrev%>%filter(outcome %like% paste("^",lastWd,".",sep="")))$outcome
+            }
+            if (length(favorits) > 0) {
+                tmp <- data.table(rbind(predPrev[outcome %in% favorits,])) 
+                toLog("......Filtering out the suggestions, dont matching the last word.")
+                
+                rtrn <- as.data.table(tmp)
+                names(rtrn) <- c("predictor","outcome","freq")
+            }         
+            suppressWarnings(rm(allcand,predPrev,favorits,tmp))
+            
+        }
+        
+        if (nrow(rtrn) > 0) {
+            toLog(paste("..In-word search produced", nrow(rtrn),"suggestions. Sorting by descending frequency."))
+            rtrn <- rtrn %>% arrange(desc(freq))
+            rtrn_sorted <- TRUE
+        } else {
+            toLog("..No results for in-word prediction for",lastWd)
+            toLog("....Starting axillary search in the reference word list.")
+            rtrn <- as.data.table(bind_rows(rtrn, envData$dt_scowl[lastWd] %>% select(predictor,outcome,freq) ))
+        }
     }
-    
-    if (nrow(rtrn) > 0) {
-        toLog(paste("..In-word search produced", nrow(rtrn),"suggestions. Sorting by descending frequency."))
-        rtrn <- rtrn %>% arrange(desc(freq))
-        rtrn_sorted <- TRUE
-    } else {
-        toLog("..No results for in-word prediction for",lastWd)
-        toLog("....Starting axillary search in the reference word list.")
-        rtrn <- as.data.table(bind_rows(rtrn, envData$dt_scowl[lastWd] %>% select(predictor,outcome,freq) ))
-    }
-    
     rtrn
 }
 
-makePredictions <- function(xx, iwp = TRUE) {
+nextWordPrediction <- function(xx, iwp = TRUE) {
     
     toLog("..Starting the next-word prediction.")
     
@@ -330,7 +377,7 @@ makePredictions <- function(xx, iwp = TRUE) {
             lgth <- length(tmp) - 1
             rm(tmp)
             toLog("......Making prediction for",xx)
-            rtrn <- makePredictions(xx, iwp = FALSE)
+            rtrn <- nextWordPrediction(xx, iwp = FALSE)
         }
         
         ## Last word standing, still no result...
@@ -361,77 +408,101 @@ makePredictions <- function(xx, iwp = TRUE) {
 
 predictionEngine <- function(strg, shiny = FALSE) {
     
-    rtrn <- emptyDT
-    
-    
     tmpEnv$LOG <- c("")
     
     toLog("Input line", strg)
     
-    inWordPrediction <<- TRUE  #in-word prediction as default (completion of the word just typed in)
-    endsWithArticle <- FALSE
-    endsWithDot <- FALSE
-    
-    if (grepl("[[:blank:]]+$", strg)) {
-        inWordPrediction <- FALSE    # blanks at the end of string - last word complete, predicting the next word
-        if (grepl("[[:blank:]]+(the|a|an)[[:blank:]]+$", strg)) {
-            endsWithArticle <- TRUE
-        }
-    }
-    
-    toLog("In-word prediction",inWordPrediction)
-    toLog("Ends with article",endsWithArticle)
-    
-    xpr <- precondString(strg)
-    xpr <- sub(" . *$","",xpr)
-    
-    toLog("Effective expression",xpr)
-    
-    if (! xpr == ".") {  #Input string was not filled ONLY with blanks
+    if(strg %like% "[.?!][[:blank:]]*$")  { 
+        toLog("We don't predict over the phrase bounds.")
+        rtrn <- list()
         
-        if (inWordPrediction) {
-            toLog("Going into in-word prediction.")
-            rtrn <- inWordPredictEngine(xpr)
+    } else {
+        
+        inWordPrediction <<- TRUE  #in-word prediction as default (completion of the word just typed in)
+        endsWithArticle <- FALSE
+        endsWithDot <- FALSE
+        
+        if (grepl("[[:blank:]]+$", strg)) {
+            inWordPrediction <- FALSE    # blanks at the end of string - last word complete, predicting the next word
+            if (grepl("[[:blank:]]+(the|a|an)[[:blank:]]+$", strg)) {
+                endsWithArticle <- TRUE
+            }
+        }
+        
+        toLog("In-word prediction",inWordPrediction)
+        toLog("Ends with article",endsWithArticle)
+        
+        
+        rtrn <- emptyDT
+        xpr <- precondString(strg)
+        xpr <- sub(" . *$","",xpr)
+        
+        toLog("Effective expression",xpr)
+        
+        if (inWordPrediction & xpr == tmpEnv$cachedExp) {
+            toLog("Effective expression has not changed since last prediction.")
+            rtrn <- tmpEnv$cachedRtrn
+                
         } else {
-            toLog("Going to next-word prediction")
-            rtrn <- makePredictions(xpr, inWordPrediction)
+            
+            if (! xpr == ".") {  #Input string was not filled ONLY with blanks
+                
+                if (inWordPrediction) {
+                    toLog("Going into in-word prediction.")
+                    rtrn <- inWordPredictEngine(xpr)
+                } else {
+                    toLog("Going to next-word prediction")
+                    rtrn <- nextWordPrediction(xpr, inWordPrediction)
+                    tmpEnv$cachedOutcomes <- list() # The in-word search cache is no more valid.
+                    tmpEnv$lastWord <- ""
+                }
+            }
         }
-    }
-    
-    # Exclude verbs after an article like " the swim" :(
-    if (endsWithArticle){
         
-        toLog("Input line ends with article - excluding pure verbs from suggestions.")
-        tmp <- envData$dt_scowl[rtrn$outcome]
-        msk <- tmp$verb == TRUE & !(tmp$noun == TRUE | tmp$adj == TRUE | tmp$adv == TRUE)
-        msk[is.na(msk)] <- FALSE
-        rtrn <- rtrn[!msk,]
-    }
+        tmpEnv$cachedExp <- xpr
+        
+        # Exclude verbs after an article like " the swim" :(
+        if (endsWithArticle){
+            
+            toLog("Input line ends with article - excluding pure verbs from suggestions.")
+            tmp <- envData$dt_scowl[rtrn$outcome]
+            msk <- tmp$verb == TRUE & !(tmp$noun == TRUE | tmp$adj == TRUE | tmp$adv == TRUE)
+            msk[is.na(msk)] <- FALSE
+            rtrn <- rtrn[!msk,]
+        }
+        
+        if (! rtrn_sorted) {
+            rtrn <- rtrn%>%arrange(desc(freq))
+            rtrn_sorted <- TRUE
+        }
+        
+        tmpEnv$cachedRtrn <- rtrn
+        
+        if (nrow(rtrn) > maxLinesOut ) {
+            toLog("..Trimming suggestions to preconfigured max. lines",maxLinesOut)
+            rtrn <- rtrn%>%slice(1:maxLinesOut)
+        }
+        
+        if (shiny) {
+            rtrn <- rtrn$outcome
+            names(rtrn) <- rtrn
+        }
+        toLog("Returning the prediction results.")
+        
+    } 
     
-    if (! rtrn_sorted) {
-        rtrn <- rtrn%>%arrange(desc(freq))
-        rtrn_sorted <- TRUE
-    }
-    
-    if (nrow(rtrn) > maxLinesOut ) {
-        rtrn <- rtrn%>%slice(1:maxLinesOut)
-    }
-    
-    if (shiny) {
-        rtrn <- rtrn$outcome
-        names(rtrn) <- rtrn
-    }
-    
-    toLog("Returning the prediction results.")
+    tmpEnv$cachedOutcomes <- rtrn
     
     list(rtrn,tmpEnv$LOG)
-    
 }
 
 
 wrapPE <- function(strg, shiny = FALSE) {
+    
     exectime <- round(unclass(system.time(rtrn <- predictionEngine(strg,shiny)))[3], 4)
     rtrn[[3]] <- exectime
+    class(rtrn[1])
+    #if(nrow(rtrn[[1]]) == 0) names(rtrn[[1]]) <-c("","","")
     tmpEnv$rtrn <- rtrn
     rtrn
 }
@@ -455,9 +526,12 @@ shinyServer(function(input, output, session) {
     output$concepts <- renderUI(HTML(paste(cocepts_pred, collapse = '<br/>')))
     
     
+    dbs_loaded <- reactive({
+        reloadDBs(dt_monograms=input$dt_monograms, dt_bigrams=input$dt_bigrams, dt_trigrams=input$dt_trigrams, 
+                  dt_four_grams=input$dt_four_grams, dt_pentagrams=input$dt_pentagrams)
+    })
     
-    output$memSize <- renderTable(db_loaded)
-    
+    output$memSize <- renderTable(dbs_loaded())
     
     
     sI <- sessionInfo()
@@ -479,23 +553,12 @@ shinyServer(function(input, output, session) {
     
     reportConsumption()
     
-    pingShiny <- function() {
-        if (sI$running %like% "Windows") { 
-            ping = "ping -n 10 ddakhno.shinyapps.io"
-        } else {
-            ping = "ping -c 10 -i .2 ddakhno.shinyapps.io"
-        }
-        rtt <- system(ping,intern = T)
-        gsub("/"," / ",rtt[length(rtt)])
-    }
-    
-    rtt <- pingShiny()
-    output$roundTrip <- renderText(rtt)                         
     
     observe({
-        if(!is.null(input$inSelect)){
+        if(!is.null(input$inSelect)) {
             selected <- input$inSelect
             input <- input$userInput
+            js$focusOnUserInput()
             
             z <- ""
             if (!grepl("[[:blank:]]+$",input)) {
@@ -508,7 +571,7 @@ shinyServer(function(input, output, session) {
                 if (grepl("[.!?][[:blank:]]*$",input)) {
                     frst <- toupper(gsub("^(.).*$", "\\1",selected))
                     selected <- gsub("^.",frst,selected)
-                }    
+                }
                 z <- paste(input,selected)
                 
             }
@@ -516,33 +579,20 @@ shinyServer(function(input, output, session) {
             updateTextInput(session, 'userInput', value = z)
             updateSelectInput(session, 'inSelect', choices = c() )
             #input <- input$userInput
-            js$focusOnUserInput()
+            
         }
     })
     
     
-    observe({
-        if(!is.null(input$userInput) && stri_length(input$userInput) > 0)   {
-            rtrn <- wrapPE(input$userInput, TRUE)
-            updateSelectInput(session, 'inSelect', choices = c({ rtrn[[1]] }) )
-            updateSelectInput(session, 'LOG', choices = rtrn[[2]] )
-            output$execTime <- renderText(rtrn[[3]])
-        }
+    observe({ if(!is.null(input$userInput) && stri_length(input$userInput) > 0)   {
+        rtrn <- wrapPE(input$userInput, TRUE)
+        updateSelectInput(session, 'inSelect', choices = c({ rtrn[[1]] }) )
+        updateSelectInput(session, 'LOG', choices = rtrn[[2]] )
+        output$execTime <- renderText(rtrn[[3]])
+    }
     })
     
     
-    observeEvent(
-        input$reloadDB, { output$memSize <- renderText("WAIT!")
-            output$memSize <- renderTable(reloadDBs(dt_monograms=input$dt_monograms, dt_bigrams=input$dt_bigrams, dt_trigrams=input$dt_trigrams,
-                                                                 dt_four_grams=input$dt_four_grams, dt_pentagrams=input$dt_pentagrams))
-        }
-    )
-    
-    observeEvent(
-        input$pingShiny, { rtt <- pingShiny()
-        output$roundTrip <- renderText(rtt)
-        }
-    )
     
     observeEvent(
         input$saveLog, {

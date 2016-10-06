@@ -114,12 +114,7 @@ fluidPage(
                                                         
                                                         choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         selected = 3
-                                           ),
-                                           h6("-----------------\
-                                              "),
-                                           actionButton("reloadDB", "Reload"),
-                                           h6("-----------------")
-                                           
+                                           )
                                            
                                     )
                                 )
@@ -151,7 +146,7 @@ fluidPage(
                      )
                  )
         ),
-        tabPanel("Short user manual",
+        tabPanel("User manual",
                  wellPanel(
                      h3("General information"),
                      h5("You are dealing wit
@@ -175,9 +170,7 @@ fluidPage(
                      h5("1. At the TestBoard tab in the right lower corner You can see the execution time of the last request."),
                      h5("2. At the same place You can see the size in memory for the loaded prediction data banks."),
                      h5("3. At the tab \"System information\" You can get the general system information and actual resource consumption from the viewpoint 
-                        of operational system. The resource consumption information will be updated after each request."),
-                     h5("4. You may see the network round-trip times in the technical corner. With the but
-                        ton [Refresh] You can recheck them as needed.")
+                        of operational system. The resource consumption information will be updated after each request.")
                  ),
                  wellPanel(
                      h3("Reconfiguring on-the-fly"),
@@ -186,7 +179,8 @@ fluidPage(
                      h5("2. Click on the proper radio button to load data bank of another size."),
                      h5("3. For the first time after start click on the button [Reload] and wait till the memory size beneath is updated."),
                      h5("4. All the following reloads will be triggered through activation of radio button by itself."),
-                     h5("2. Wait till the table \"Memory actually used\" refreshed is.")
+                     h5("5. Wait till the table \"Memory actually used\" refreshed is."),
+                     h5("6. You can unload the data base of some kind at all (e.g. if You mean, it is too large or when the data base of longer predictors \"traps\ the predictions too much.")
                  ),
                  wellPanel(
                      h3("Logging"),
