@@ -12,16 +12,16 @@ library(shinyjs)
 library(bootstrap)
 library(V8)
 
-useShinyjs()
 focusOnUserInput <- "shinyjs.focusOnUserInput = function(){document.getElementById('userInput').focus();}"
-extendShinyjs(text = focusOnUserInput)
 
 fluidPage(
     
     theme = "bootstrap.cerulean.css",
     includeCSS("www/bootstrap.cerulean.min.css"),
     
+    useShinyjs(),
     
+    extendShinyjs(text = focusOnUserInput),
     
     # Application title
     tabsetPanel(
@@ -40,7 +40,7 @@ fluidPage(
                      h4("- Fortunately, we practice agile software development and not the waterfall model. It means, we can start with a bare idea, achieving 
                         perfection in repeating cycles of  planning, analysis, design, coding, unit and acceptance testing."),
                      h4("- So, we rolled up sleeves and started with the project. We had to use the toolbox of Natural Language Processing."),
-                     h4("- We decided on analyzing the n-gram models of the vivid language as seen in Internet. We have taken the text corpus called HC Corpora, representing the real world English from blogs, news and Twitter messages. The language is nothing but regular, accurate English. So, we've invested a lot of time
+                     h4("- We decided on analyzing the n-gram models of the vivid language as seen in Internet. We have taken the text corpus called HC Corpora, representing the real world English from blogs, news and Twitter messages. The language is everything but a regular, neat English. So, we've invested a lot of time
                         and efforts in exploration and preparing tidy data bases."), 
                      h4("- Time and again we had to make assumptions and take decisions that are yet to be validated externally. Just as an example, we decided to respect only regular words (i.e. consisting only of letters) and hashtags."),
                      h4("- After four weeks of hard work it is time now to pick up our customers. We expect them to test our prediction engine with respect to language and technical aspects."),
@@ -48,7 +48,7 @@ fluidPage(
                      
                  ),
                  wellPanel(
-                     h2("We are proud about the work done and invite You our playground, the TestBoard. Give it a try just now!")
+                     h2("We are proud about the work done and invite You to our playground, the TestBoard. Give it a try just now!")
                      
                  )
         ),
@@ -57,14 +57,14 @@ fluidPage(
                  hr(),
                  fluidRow(
                      column(8,
-                            h3(
-                                "Text input"),
+                            h5("Wait till the table \"Memory actually used\" displayed is."),
+                            h3("Text input"),
                             wellPanel(
                                 textInput(inputId = "userInput",  label = "", placeholder = "Type Your text here")
                             ),
                             
                             hr(),
-                            h3("Did You mean something of these? - Then select!"),
+                            h3("Did You mean something of these? - Then click on it!"),
                             wellPanel(
                                 selectInput(inputId = 'inSelect', label='', choices = c(), 
                                             
@@ -87,32 +87,32 @@ fluidPage(
                             wellPanel(
                                 fluidRow(
                                     column(6,
-                                           radioButtons(inputId = 'db_mono', 'DB used words',
+                                           radioButtons(inputId = 'dt_monograms', 'DB used words',
                                                         
-                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         selected = 3
                                            ),
                                            
-                                           radioButtons(inputId = 'db_bi', 'DB one-word predictors',
-                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                           radioButtons(inputId = 'dt_bigrams', 'DB one-word predictors',
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         selected = 3
                                                         
                                            ),
-                                           radioButtons(inputId = 'db_tri', 'DB two-words predictors',
-                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                           radioButtons(inputId = 'dt_trigrams', 'DB two-words predictors',
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         selected = 3
                                            )
                                     ),
                                     column(6,
                                            
-                                           radioButtons(inputId = 'db_four', 'DB three-words predictors',
-                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                           radioButtons(inputId = 'dt_four_grams', 'DB three-words predictors',
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         
                                                         selected = 3
                                            ),
-                                           radioButtons(inputId = 'db_penta', 'DB four-words predictors',
+                                           radioButtons(inputId = 'dt_pentagrams', 'DB four-words predictors',
                                                         
-                                                        choices = c("small" = 3,"middle" = 2,"big" = 1),
+                                                        choices = c("small" = 3,"middle" = 2,"big" = 1, "unload" = 0),
                                                         selected = 3
                                            ),
                                            h6("-----------------\
@@ -131,16 +131,16 @@ fluidPage(
                             wellPanel(
                                 h4("Execution time on server, last prediction, msec."),
                                 textOutput( outputId = 'execTime'),
-                                h4("Network round trip time, msec."),
-                                fluidRow(
-                                    column(7,
-                                           textOutput(outputId='roundTrip')
-                                    ),
-                                    
-                                    column(5,
-                                           actionButton(inputId='pingShiny', label = 'Refresh')
-                                    )
-                                ),
+                                # h4("Network round trip time, msec."),
+                                # fluidRow(
+                                #     column(7,
+                                #            textOutput(outputId='roundTrip')
+                                #     ),
+                                #     
+                                #     column(5,
+                                #            actionButton(inputId='pingShiny', label = 'Refresh')
+                                #     )
+                                # ),
                                 h4
                                 ("Memory actually used, MByte"),
                                 htmlOutput(outputId = "memSize"),
@@ -158,12 +158,12 @@ fluidPage(
                         h the site aimed at the purposes of remote testing. This is on-line front-end for the working prediction engine running at an 
                         Internet server. It means, Your input will be transferred over multiple hops in network to the prediction engine. The packages with suggestions follow the path backwards to You. It might be some longer way, so we would ask You to be indulgent. 
                         You'll see the actual execution times on the server."),
-                     h5("The TestBoard is a prototype, so it is a really simple front-end, without glamour and a lot of gimmicks. We have tested some ideas like capitalization at the beginning of sentences, but it doesn't really work by now. One more time, be indulgent.")
+                     h5("The TestBoard is a prototype, so it is a really simple front-end, without glamour and a lot of gimmicks. We have tested some ideas like capitalization at the beginning of sentences, but it doesn't work reliably by now. One more time, be indulgent.")
                  ),
                  wellPanel(
                      h3("Making input"),
                      h5("1. Go to the tab \"TestBoard\""),
-                     
+                     h5("2. Wait till the table \"Memory actually used\" (in the right lower corner) displayed is."),
                      h5("2. Start typing under \"Text input\""),
                      h5("3. Each change in the text input (even adding or removing of the blank) initiates the request toward prediction engine."),
                      h5("4. Within a split second the suggestions appear in the selection area beneath Your input."),
@@ -181,13 +181,12 @@ fluidPage(
                  ),
                  wellPanel(
                      h3("Reconfiguring on-the-fly"),
-                     h5("Tester has the option to test prediction engine with n-g
-                        ram data banks of different size."),
+                     h5("Tester has the option to test prediction engine with n-gram data banks of different size."),
                      h5("1. Middle size will be set at start as default for all data banks."),
                      h5("2. Click on the proper radio button to load data bank of another size."),
-                     
                      h5("3. For the first time after start click on the button [Reload] and wait till the memory size beneath is updated."),
-                     h5("4. All the following reloads will be triggered through activation of radio button itself.")
+                     h5("4. All the following reloads will be triggered through activation of radio button by itself."),
+                     h5("2. Wait till the table \"Memory actually used\" refreshed is.")
                  ),
                  wellPanel(
                      h3("Logging"),

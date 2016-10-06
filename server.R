@@ -32,6 +32,7 @@ db_dir <- "finalDB"
 
 envData <- new.env()
 tmpEnv <- new.env()
+confEnv <- new.env()
 
 envData$dt_monograms <- NULL
 envData$dt_bigrams <- NULL
@@ -39,66 +40,84 @@ envData$dt_trigrams <- NULL
 envData$dt_four_grams <- NULL
 envData$dt_pentagrams <- NULL
 
-db_loaded <- data.table()
 
+confEnv$db_loaded <- list()
+confEnv$db_default <- list(dt_monograms = 3 , dt_bigrams = 3, dt_trigrams = 3, dt_four_grams = 3, dt_pentagrams = 3, dt_scowl = 1)
+confEnv$db_eq <- c("dt_monograms"="List of used words", "dt_bigrams" = "One-word predictors", "dt_trigrams" = "Two-word predictors", 
+                   "dt_four_grams" =  "Three-word predictors", "dt_pentagrams" =  "Four-word predictors", "dt_scowl" = "Reference word list")
 
-reloadDBs <- function(db_mono = 3, db_bi = 3, db_tri = 3, db_four = 3, db_penta = 3, db_scowl=1, db_dir = "finalDB") {
+reloadDBs <- function(...) {
     
-    db_loaded <- "Waiting for reload data banks!"
+    db_requested <- list(...)
+    db_requested <- lapply(db_requested, as.numeric)
     
-    db_mono <- as.integer(db_mono)
-    db_bi <- as.integer(db_bi)
-    db_tri <- as.integer(db_tri)
-    db_four <- as.integer(db_four)
-    db_penta <- as.integer(db_penta)
-    db_scowl <- as.integer(db_scowl)
+    #print("Requested")
+    #print(db_requested)
     
-    argv <- c(db_mono,db_bi, db_tri, db_four, db_penta, db_scowl)
+    on_load <- list()
+    dbfiles <- grep("^d[bt]_", dir(db_dir), value=T)
     
-    dt_names <- c("List used words", "One-word predictors", "Two-word predictors", "Three-word predictors", "Four-word predictors", "Reference dictionary")
-    names(dt_names) <- c("db_mono", "db_bi", "db_tri", "db_four", "db_penta", "db_scowl")
-    
-    
-    dbs <- grep("db_",dir(db_dir),value=T)
-    
-    dtabs <- c()
-    sizes <- c()
-    nrs <- c()
-    
-    prnte <- parent.env(parent.frame())
-    
-    for (i in seq_along(dt_names[1:length(dt_names)])) {
-        dtt <- names(dt_names)[i]
-        j <- argv[i]
-        
-        obj <- load(file.path(db_dir,grep(dtt,dbs,value=T)[j]))
-        
-        dtabs <- c(dtabs, dt_names[i])
-        sizes <- c(sizes, round(object.size(get(obj))/1024/1024, 2))
-        nrs <- c(nrs, nrow(get(obj)))
-        
-        if(dtt == "db_mono") { assign("dt_monograms", get(obj), pos = envData) }
-        if(dtt == "db_bi") { assign("dt_bigrams", get(obj), pos = envData) }
-        if(dtt == "db_tri") { assign("dt_trigrams", get(obj), pos = envData) }
-        if(dtt == "db_four") { assign("dt_four_grams", get(obj), pos = envData) }
-        if(dtt == "db_penta") { assign("dt_pentagrams", get(obj), pos = envData) }
-        if(dtt == "db_scowl") { assign("dt_scowl", get(obj), pos = envData) }
+    if (length(db_requested) == 0) {
+        on_load <- confEnv$db_default     #Initial request with no parameter, load all DB in default set up.
+    } else {
+        for (db in names(db_requested)) {
+            if (length(confEnv$db_loaded) != 0 && db %in% names(confEnv$db_loaded) && db_requested[[db]] != confEnv$db_loaded[[db]]) { # DB already loaded, but the other size - only then reload
+                on_load[db] <- db_requested[db]
+            }
+            if(! db %in% names(confEnv$db_loaded) && db %in% names(confEnv$db_default)) { # DB not loaded by now - load anyway
+                on_load[db] <- db_requested[db]
+            }
+        }
     }
     
+    #print("On-load")
+    #print(on_load)
+    
+    for(db in names(on_load)){
+        
+        if (on_load[[db]] > 0) { # DB should bie loaded
+            obj <- load(file.path(db_dir,grep(db,dbfiles,value=T)[on_load[[db]]]))
+            assign(db, get(obj), pos = envData)
+            confEnv$db_loaded[db] <- on_load[[db]]
+        }
+        
+        if (on_load[[db]] == 0) { #DB unload if parameter == 0
+            rm(list=db, envir = envData)
+            confEnv$db_loaded[db] <- NULL
+            invisible(gc())
+        }
+    }
+    
+    rm(db_joined)
+    invisible(gc())
+    
+    dtabs <- sizes <- nrs <- c()
+    
+    db_list <- ls(envData)
+    
+    for (dt in names(confEnv$db_eq)) {
+        dtabs <- c(dtabs, confEnv$db_eq[dt])
+        if (dt %in% db_list) {
+            obj <- get(dt, env = envData)
+            sizes <- c(sizes, round(object.size(obj)/1024/1024, 2))
+            nrs <- c(nrs, nrow(obj))
+            rm(obj)
+        } else {
+            sizes <- c(sizes, 0)
+            nrs <- c(nrs, 0)
+        }
+    }
     dtabs <- c(dtabs,"Total")
     sizes <- c(sizes,sum(sizes))
     nrs <- c(nrs,"")
     
-    
     db_loaded <- data.table("Databank"=dtabs,"Nr.rows"=nrs,"RAM used,Mbyte"=sizes)
+    
     db_loaded
     
 }
 
 db_loaded <- reloadDBs()
-
-
-
 
 removeWordsNogo <- function(lin,wng) {
     tmp <- strsplit(lin, split ="[[:blank:]]+" )[[1]]
@@ -223,7 +242,7 @@ inWordPredictEngine <- function(xpr) {
             favorits <- (predPrev%>%filter(outcome %like% paste("^",lastWd,".",sep="")))$outcome
         }
         if (length(favorits) > 0) {
-            tmp <- data.table(rbind(predPrev[outcome %in% favorits,])) #,predPrev[!outcome %in% favorits,]%>%arrange(desc(freq))))
+            tmp <- data.table(rbind(predPrev[outcome %in% favorits,])) 
             toLog("......Filtering out the suggestions, dont matching the last word.")
             
             rtrn <- as.data.table(tmp)
@@ -283,7 +302,7 @@ makePredictions <- function(xx, iwp = TRUE) {
         toLog("....Still no suggestions:( Assumed typo like 'my sonn' for 'my son'. Iteratively shortening the last word by the last letter.")
         lgLW <- stri_length(gsub("^.* ","",xx))
         #if (lgLW <= maxWordLength) {
-        while(nrow(rtrn) == 0 && lgLW >= inWordLowLimit) {
+        while(nrow(rtrn) == 0 & lgLW >= inWordLowLimit) {
             
             xx <- gsub(".$","",xx)
             toLog("......Seeking databases with",xx)
@@ -330,16 +349,15 @@ makePredictions <- function(xx, iwp = TRUE) {
         if (! rtrn_sorted)  {
             rtrn <- rtrn %>% arrange(desc(freq))
             rtrn_sorted <- TRUE
-        } else {
-            # Nothing found anywhere - offering blind the words with the highest frequency
-            toLog("Nothing found anywhere - offering blind the words with the highest frequency.")
-            rtrn <- envData$dt_monograms%>%arrange(desc(freq))%>%slice(1:maxLinesOut)
-            rtrn_sorted <- TRUE
         }
-        rtrn
+    }else {
+        # Nothing found anywhere - offering blind the words with the highest frequency
+        toLog("Nothing found anywhere - offering blind the words with the highest frequency.")
+        rtrn <- envData$dt_monograms%>%arrange(desc(freq))%>%slice(1:maxLinesOut)
+        rtrn_sorted <- TRUE
     }
+    rtrn
 }
-
 
 predictionEngine <- function(strg, shiny = FALSE) {
     
@@ -389,9 +407,18 @@ predictionEngine <- function(strg, shiny = FALSE) {
         msk[is.na(msk)] <- FALSE
         rtrn <- rtrn[!msk,]
     }
-    rtrn <- na.omit(rtrn%>%arrange(desc(freq))%>%slice(1:maxLinesOut))
+    
+    if (! rtrn_sorted) {
+        rtrn <- rtrn%>%arrange(desc(freq))
+        rtrn_sorted <- TRUE
+    }
+    
+    if (nrow(rtrn) > maxLinesOut ) {
+        rtrn <- rtrn%>%slice(1:maxLinesOut)
+    }
+    
     if (shiny) {
-        rtrn <- na.omit(rtrn%>%arrange(desc(freq))%>%slice(1:maxLinesOut))$outcome
+        rtrn <- rtrn$outcome
         names(rtrn) <- rtrn
     }
     
@@ -405,6 +432,7 @@ predictionEngine <- function(strg, shiny = FALSE) {
 wrapPE <- function(strg, shiny = FALSE) {
     exectime <- round(unclass(system.time(rtrn <- predictionEngine(strg,shiny)))[3], 4)
     rtrn[[3]] <- exectime
+    tmpEnv$rtrn <- rtrn
     rtrn
 }
 
@@ -471,8 +499,9 @@ shinyServer(function(input, output, session) {
             
             z <- ""
             if (!grepl("[[:blank:]]+$",input)) {
+                # In-word prediction
                 # Exchanging the last incomplete word through user select
-                z <- paste(gsub("[[:blank:]]+[^[:blank:]]+$","",input),selected)
+                z <- gsub("[^[:blank:]]+$",selected,input)
             } else  {
                 # Adding one of proposals to the input line
                 # The input line ends with [.!?] - first letter of select to upper
@@ -503,7 +532,9 @@ shinyServer(function(input, output, session) {
     
     
     observeEvent(
-        input$reloadDB, {output$memSize <- renderTable( reloadDBs(input$db_mono,input$db_bi, input$db_tri, input$db_four, input$db_penta))
+        input$reloadDB, { output$memSize <- renderText("WAIT!")
+            output$memSize <- renderTable(reloadDBs(dt_monograms=input$dt_monograms, dt_bigrams=input$dt_bigrams, dt_trigrams=input$dt_trigrams,
+                                                                 dt_four_grams=input$dt_four_grams, dt_pentagrams=input$dt_pentagrams))
         }
     )
     
@@ -517,7 +548,7 @@ shinyServer(function(input, output, session) {
         input$saveLog, {
             if(identical(tmpEnv$LOG, c(""))) { tmpEnv$LOG = "empty log" }
             fil <- file.choose()
-            writeLines(text = c(tmpEnv$LOG,rtrn[[3]]), con = fil)
+            writeLines(text = c(tmpEnv$LOG,tmpEnv$rtrn[[3]]), con = fil)
         }
     )
 })
