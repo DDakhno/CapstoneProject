@@ -47,7 +47,6 @@ confEnv$db_eq <- c("dt_monograms"="List of used words", "dt_bigrams" = "One-word
                    "dt_four_grams" =  "Three-word predictors", "dt_pentagrams" =  "Four-word predictors", "dt_scowl" = "Reference word list")
 
 tmpEnv$lastWord <- ""
-tmpEnv$cachedOutcomes <- list()
 tmpEnv$cachedExp <- ""
 tmpEnv$cachedRtrn <- data.table(predictor = "", outcome="", freq=1)[0]
 
@@ -165,7 +164,7 @@ precondString <- function(x) {
     x <- tolower(x)
     
     #Remove articles
-    if (endsWithArticle) {
+    if (tmpEnv$endsWithArticle) {
         x <- removeWordsNogo(x,wordsnogo)
     }
     
@@ -235,28 +234,27 @@ inWordPredictEngine <- function(xpr) {
     if (! finish) { 
         
         # Shortcut for search in the cached suggestions
-        print(tmpEnv$cachedOutcomes)
+        # print(tmpEnv$cachedOutcomes)
         
-        if(length(tmpEnv$cachedOutcomes) > 0 & lastWd %like% tmpEnv$lastWord ) { 
+        if(nrow(tmpEnv$cachedRtrn) > 0 & lastWd %like% tmpEnv$lastWord ) { 
+            
+            # print("..In-word prediction, looking into the cached result of the last look-up.")
+            # print(lastWd)
+            # print(tmpEnv$lastWord)
+            # print(tmpEnv$cachedRtrn)
+            # print(paste("^",lastWd,".", sep = ""))
+            
             toLog("..In-word prediction, looking into the cached result of the last look-up.")
-            outcomes <- tmpEnv$cachedOutcomes[names(tmpEnv$cachedOutcomes) %like% paste("^",lastWd,".", sep = "")]
+            rtrn <- tmpEnv$cachedRtrn %>% filter(outcome %like% paste("^",lastWd,".", sep = ""))
             if (length(outcomes) > 0){
-                toLog(paste("....Matching outcomes found in cache, returning.",length(outcomes)))
-            } else { toLog(paste("....Nothing  found in cache, going further.")) }
-            tmpEnv$cachedOutcomes <- outcomes
-            tmpEnv$lastWord <- lastWd
-            
-            
-            if(is.null(prevWords)) prevWords <- NA
-            if (length(outcomes) > 0){
-                rtrn <- data.table(predictor=rep(prevWords, length(outcomes)), outcome = outcomes, freq = seq(length(outcomes),1))
-            } else {
-                rtrn <- data.table(predictor="predictor", outcome = "outcomes", freq = 1)[0]
+                toLog(paste("....Matching outcomes found in cache, returning.",nrow(rtrn)))
+                finish <- TRUE
+                rtrn_sorted <- TRUE
+                tmpEnv$cachedRtrn <- rtrn
+                tmpEnv$lastWord <- lastWd
+            } else { 
+                toLog(paste("....Nothing  found in cache, going further.")) 
             }
-            
-            
-            finish <- TRUE
-            rtrn_sorted <- TRUE
         }
     }
     
@@ -265,8 +263,7 @@ inWordPredictEngine <- function(xpr) {
         toLog("....Searching for words starting with",lastWd)
         rtrn <- as.data.table(envData$dt_monograms %>% filter(outcome %like% paste("^",lastWd,".", sep = ""))%>%arrange(desc(freq)))
         tmpEnv$lastWord <- lastWd
-        tmpEnv$cachedOutcomes <- rtrn$outcome
-        
+
         if(nrow(rtrn) > 0) {
             toLog(paste("....Found",nrow(rtrn),"suggestions."))
             rtrn_sorted <- TRUE
@@ -290,7 +287,7 @@ inWordPredictEngine <- function(xpr) {
             }
             if (length(favorits) > 0) {
                 tmp <- data.table(rbind(predPrev[outcome %in% favorits,])) 
-                toLog("......Filtering out the suggestions, dont matching the last word.")
+                toLog("......Filtering out the suggestions, dont matching the preceding words.")
                 
                 rtrn <- as.data.table(tmp)
                 names(rtrn) <- c("predictor","outcome","freq")
@@ -413,24 +410,24 @@ predictionEngine <- function(strg, shiny = FALSE) {
     toLog("Input line", strg)
     
     if(strg %like% "[.?!][[:blank:]]*$")  { 
-        toLog("We don't predict over the phrase bounds.")
+        toLog("We don't predict over the sentence boundaries.")
         rtrn <- list()
         
     } else {
         
-        inWordPrediction <<- TRUE  #in-word prediction as default (completion of the word just typed in)
-        endsWithArticle <- FALSE
-        endsWithDot <- FALSE
+        tmpEnv$inWordPrediction <- TRUE  #in-word prediction as default (completion of the word just typed in)
+        tmpEnv$endsWithArticle <- FALSE
+        tmpEnv$endsWithDot <- FALSE
         
         if (grepl("[[:blank:]]+$", strg)) {
-            inWordPrediction <- FALSE    # blanks at the end of string - last word complete, predicting the next word
+            tmpEnv$inWordPrediction <- FALSE    # blanks at the end of string - last word complete, predicting the next word
             if (grepl("[[:blank:]]+(the|a|an)[[:blank:]]+$", strg)) {
-                endsWithArticle <- TRUE
+                tmpEnv$endsWithArticle <- TRUE
             }
         }
         
-        toLog("In-word prediction",inWordPrediction)
-        toLog("Ends with article",endsWithArticle)
+        toLog("In-word prediction",tmpEnv$inWordPrediction)
+        toLog("Ends with article",tmpEnv$endsWithArticle)
         
         
         rtrn <- emptyDT
@@ -439,21 +436,20 @@ predictionEngine <- function(strg, shiny = FALSE) {
         
         toLog("Effective expression",xpr)
         
-        if (inWordPrediction & xpr == tmpEnv$cachedExp) {
+        if (tmpEnv$inWordPrediction & xpr == tmpEnv$cachedExp) {
             toLog("Effective expression has not changed since last prediction.")
             rtrn <- tmpEnv$cachedRtrn
-                
+            
         } else {
             
             if (! xpr == ".") {  #Input string was not filled ONLY with blanks
                 
-                if (inWordPrediction) {
+                if (tmpEnv$inWordPrediction) {
                     toLog("Going into in-word prediction.")
                     rtrn <- inWordPredictEngine(xpr)
                 } else {
                     toLog("Going to next-word prediction")
-                    rtrn <- nextWordPrediction(xpr, inWordPrediction)
-                    tmpEnv$cachedOutcomes <- list() # The in-word search cache is no more valid.
+                    rtrn <- nextWordPrediction(xpr, tmpEnv$inWordPrediction)
                     tmpEnv$lastWord <- ""
                 }
             }
@@ -462,7 +458,7 @@ predictionEngine <- function(strg, shiny = FALSE) {
         tmpEnv$cachedExp <- xpr
         
         # Exclude verbs after an article like " the swim" :(
-        if (endsWithArticle){
+        if (tmpEnv$endsWithArticle){
             
             toLog("Input line ends with article - excluding pure verbs from suggestions.")
             tmp <- envData$dt_scowl[rtrn$outcome]
@@ -490,8 +486,6 @@ predictionEngine <- function(strg, shiny = FALSE) {
         toLog("Returning the prediction results.")
         
     } 
-    
-    tmpEnv$cachedOutcomes <- rtrn
     
     list(rtrn,tmpEnv$LOG)
 }
@@ -588,7 +582,7 @@ shinyServer(function(input, output, session) {
         rtrn <- wrapPE(input$userInput, TRUE)
         updateSelectInput(session, 'inSelect', choices = c({ rtrn[[1]] }) )
         updateSelectInput(session, 'LOG', choices = rtrn[[2]] )
-        output$execTime <- renderText(rtrn[[3]])
+        output$execTime <- renderText(rtrn[[3]]*1000)
     }
     })
     
@@ -597,9 +591,10 @@ shinyServer(function(input, output, session) {
     observeEvent(
         input$saveLog, {
             if(identical(tmpEnv$LOG, c(""))) { tmpEnv$LOG = "empty log" }
-            fil <- file.choose()
-            writeLines(text = c(tmpEnv$LOG,tmpEnv$rtrn[[3]]), con = fil)
+            try(fil <- file.choose())
+            try(writeLines(text = c(tmpEnv$LOG,tmpEnv$rtrn[[3]]*1000), con = fil))
         }
     )
 })
+
 

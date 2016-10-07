@@ -1,70 +1,70 @@
 <style>
 .small-code pre code {
-  font-size: 1em;
+font-size: 1em;
 }
 </style>
 
 <style>
-		html, body {
-			width: 100%;
-			height: 100%;
-			margin: 0px;
-			border: 0;
-		}
+html, body {
+width: 100%;
+height: 100%;
+margin: 0px;
+border: 0;
+}
 </style>
 
 
 <script>
-		(function() {
-			var 
-				// Obtain a reference to the canvas element
-				// using its id.
-				htmlCanvas = document.getElementById('c'),
-			
-			  	// Obtain a graphics context on the
-			  	// canvas element for drawing.
-			  	context = htmlCanvas.getContext('2d');
- 
-			// Start listening to resize events and
-			// draw canvas.
-			initialize();
- 
-			function initialize() {
-				// Register an event listener to
-				// call the resizeCanvas() function each time 
-				// the window is resized.
-				window.addEventListener('resize', resizeCanvas, false);
-				
-				// Draw canvas border for the first time.
-				resizeCanvas();
-			}
-				
-			// Display custom canvas.
-			// In this case it's a blue, 5 pixel border that 
-			// resizes along with the browser window.					
-			function redraw() {
-				context.strokeStyle = 'blue';
-				context.lineWidth = '5';
-				context.strokeRect(0, 0, window.innerWidth, window.innerHeight);
-			}
-		
-			// Runs each time the DOM window resize event fires.
-			// Resets the canvas dimensions to match window,
-			// then draws the new borders accordingly.
-			function resizeCanvas() {
-				htmlCanvas.width = window.innerWidth;
-				htmlCanvas.height = window.innerHeight;
-				redraw();
-			}
-		
-		})();
-	</script>
-	
+(function() {
+var 
+// Obtain a reference to the canvas element
+// using its id.
+htmlCanvas = document.getElementById('c'),
+
+// Obtain a graphics context on the
+// canvas element for drawing.
+context = htmlCanvas.getContext('2d');
+
+// Start listening to resize events and
+// draw canvas.
+initialize();
+
+function initialize() {
+// Register an event listener to
+// call the resizeCanvas() function each time 
+// the window is resized.
+window.addEventListener('resize', resizeCanvas, false);
+
+// Draw canvas border for the first time.
+resizeCanvas();
+}
+
+// Display custom canvas.
+// In this case it's a blue, 5 pixel border that 
+// resizes along with the browser window.					
+function redraw() {
+context.strokeStyle = 'blue';
+context.lineWidth = '5';
+context.strokeRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+// Runs each time the DOM window resize event fires.
+// Resets the canvas dimensions to match window,
+// then draws the new borders accordingly.
+function resizeCanvas() {
+htmlCanvas.width = window.innerWidth;
+htmlCanvas.height = window.innerHeight;
+redraw();
+}
+
+})();
+</script>
+
 
 Building the Next Word Prediction Engine from scratch 
 ========================================================
 author: D.Dakhno
-date: 02. Oct. 2016
+date: 06. Oct. 2016
 autosize: true
 font-family: 'Helvetica'
 css: bootstrap.cerulean.css
@@ -88,13 +88,13 @@ class: small-code
 **Have fun! 頑張ってね～～**
 
 *~~Hit Chart Elegy (音楽番付哀歌)  
-  Just Like Great Britain’s–Unfortunately Bibi on Fox News Две ракеты были выпущены по южной территории #Израиль из #СекторГаза  
+Just Like Great Britain’s–Unfortunately Bibi on Fox News Две ракеты были выпущены по южной территории #Израиль из #СекторГаза  
 ★ 12月30日 Awoi Instore at Zeal Link Shibuya`  
-     ...fermented red beancurd or hong fu ru 红腐乳...  
+...fermented red beancurd or hong fu ru 红腐乳...  
 ...to order their debut EP, 플레이걸의 24時.  
-   Xi Lu Han is the full name of Lu Han (루한 / 鹿 晗)  
- ..LOL we may be getting an adlut~~~~♥♥ I hope !  
-    He loves YOU!(((: #His<3isbettter~~*
+Xi Lu Han is the full name of Lu Han (루한 / 鹿 晗)  
+..LOL we may be getting an adlut~~~~♥♥ I hope !  
+He loves YOU!(((: #His<3isbettter~~*
 
 
 Regular English by itself offers fast endless plenty of grammatical, syntactical and lexical forms and combinations with extremely 
@@ -115,14 +115,14 @@ Predictive model and algorithm
 ========================================================
 class: small-code
 
- [N-Gramms](https://en.wikipedia.org/wiki/N-gram) model has been chosen as a basis for prediction engine. Such models are widely used in statistical natural language processing. They are typically collected 
- from a text or speech corpus. So did we as well ([HC Corpus](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip), available over Coursera/SwiftKey). 
+[N-Gramms](https://en.wikipedia.org/wiki/N-gram) model has been chosen as a basis for prediction engine. Such models are widely used in statistical natural language processing. They are typically collected 
+from a text or speech corpus. So did we as well ([HC Corpus](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip), available over Coursera/SwiftKey). 
 
 The following principles were implemented for building n-gram databases:
-- Building data bases of mono, bi-, tri-, four- and pentagrams (for future usage as one-, two-, three- and four-word predictors and for in-word prediction). 
-- End of the sentence or of the line  was used as a natural break point building the n-grams (with respect to the nature of the text corpus - one message per line).
+- Building data bases of mono, bi-, tri-, four- and pentagrams. 
+- End of the sentence or of the line  was used as a natural break point building the n-grams.
 - Data bases were packed by the length in the R data tables, splited into predictor (all words of n-gram but last), outcome (the last word of n-gram) plus detected frequency. The format is directly usable by prediction engine.
-- Because of high memory consumption only 15% of the text corpus could be processed at a time. With random sampling and 21 processing iterations the lines coverage in corpus of `r round(sum(rbinom(1000000, 21,.15) > 0)/10000)`%  has been reached (mean redundancy `r round(mean(rbinom(1000000, 21,.15)),2)`) . The n-gram databases were then merged into one per n-gram length.
+- Because of high memory consumption only 15% of the text corpus could be processed at a time. With random sampling and 21 processing iterations the lines coverage in corpus of `r round(sum(rbinom(1000000, 21,.15) > 0)/10000)`%  has been reached (mean redundancy `r round(mean(rbinom(1000000, 21,.15)),2)`) . The n-gram databases were then then merged into one per n-gram length.
 - Working data bases were created, trimming the over-represented predictors (like "to be") to upper 150 outcomes by frequency and removing rare combinations.
 
 Using the data bases created, following predictive model has been implemented:
@@ -171,7 +171,9 @@ Larger data bases show about 10% higher accuracy for the price of the ten-fold h
 reveals the prevalence of the first one (one more time, for the price of RAM consumption).   
 
 Some surprisingly, the average execution time of predictions were not affected by the size of the data bases (some higher times in the last setup 
-are apparently due to more drilling down needed for prediction). It is due to the choice of indexed data tables as a storage mechanism. 
+are apparently due to more drilling down through the data bases needed for prediction). The relative short response times are due to the choice of indexed data tables as a storage mechanism.  
+
+For the real world scenarios like typing in a phrase letter by letter caching mechanisms have been implemented, reducing the load on the data bases and response times of fuzzy search (queries with *%like%*), especially of in-word prediction.
 
 The results are noway the final truth, but pioneer the way to the better and parsimonious word prediction models and implementations.
 
@@ -181,9 +183,9 @@ The results are noway the final truth, but pioneer the way to the better and par
 
 <script type="text/javascript">
 
-        var audio = document.createElement("audio");
-        audio.src = "https://ia800708.us.archive.org/33/items/WeAreTheChampions_525/WeAreTheChampions.mp3";
-        setTimeout(function () { audio.play(); }, 150000);
+var audio = document.createElement("audio");
+audio.src = "https://ia800708.us.archive.org/33/items/WeAreTheChampions_525/WeAreTheChampions.mp3";
+setTimeout(function () { audio.play(); }, 240000);
 </script>
 
 
@@ -191,14 +193,21 @@ The results are noway the final truth, but pioneer the way to the better and par
 # Congratulations to all graduates!
 
 
-
 # We have overcome!
-
 
 
 # We are the champions, my friends!
 
 
+# 1K  THNX to Brian, Roger and Jeff♥♥♥
 
-# See You by Kaggle ;)
+
+# 'm assembling a new monster PC and...
+
+
+# ...GTSY by Kaggle ;)
+
+
+# BR
+# DD
 
