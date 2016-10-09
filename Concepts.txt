@@ -1,0 +1,10 @@
+N-gram model taken as a basis for prediction mechanism.
+Longer n-grams has better predictive strength - maximal predictor length of four words has been accepted as practical.
+Combination of the in-line-prediction (next word) with in-word-prediction (predicting the ending of the word being just typed).
+Developing back off mechanism for void exact search - prediction engine should use in parallel the databases of predictors of length one, two, three and four. Prediction starts with the maximal possible predictor length, falling back to the shorter predictor sequences if needed.
+The controversy between bias and variance of statistical model should be kept in mind for advanced modeling.
+Controversy between the statistical performance of the model and resource consumption is another issue.
+With respect to the controverses, building  of the databases is of special importance (filtering out overrepresented predictors with rare outcomes, trimming the extrem rare predictors).
+For the sake of technical performance (execution times meant),  the predictor lists packed into indexed data tables, each for a kind of n-grams.
+Memory consumption of the databases should be tuned having in mind  sufficient statistical accuracy of prediction as well.
+We need no much more predicted variants, than the end user is ready to scroll through (6380 variants for the predictor "to be").

@@ -1,0 +1,4 @@
+How can we predict the next word, an Internet user is going to type into input line?
+Can we use the sequence of the words/expression he has written by the moment to predict the next word?
+If yes, what are the best predictor expressions by the length?
+What trade offs can we afford by the size of the pattern data bases?

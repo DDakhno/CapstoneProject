@@ -22,7 +22,7 @@ fluidPage(
     useShinyjs(),
     
     extendShinyjs(text = focusOnUserInput),
-    
+   
     # Application title
     tabsetPanel(
         tabPanel("Welcome!",
@@ -57,10 +57,9 @@ fluidPage(
                  hr(),
                  fluidRow(
                      column(8,
-                            h4("Wait till the table \"Memory actually used\" is displayed."),
                             h3("Text input"),
                             wellPanel(
-                                textInput(inputId = "userInput",  label = "", placeholder = "Type Your text here")
+                                textInput(inputId = "userInput",  label = "", placeholder = "Please, wait till the table \"Memory actually used\" is displayed")
                             ),
                             
                             hr(),
@@ -71,12 +70,10 @@ fluidPage(
                                             size = 15, selectize=F,  width = "50%")
                             ),
                             hr(),
-                            h3("How did we come to these choices?"),
+                            h3("How did we come to these suggestions?"),
                             
                             wellPanel(
-                                actionButton('saveLog', 'Save the log'),
-                                selectInput(inputId = 'LOG', label='', choices = c(), 
-                                            size = 15, selectize=F,  multiple = T)
+                                htmlOutput(outputId = 'LOG')
                             )
                             
                      ),
@@ -183,8 +180,7 @@ fluidPage(
                  wellPanel(
                      h3("Logging"),
                      h5("1. After each request the sequence of the steps needed for prediction will be shown in the text area in the lower left corner."),
-                     h5("2. Optionally, the log may be saved into a file by pressing the button [Save log].")
-                     
+                     h5("2. Optionally, the log may be selected with a mouse, copied into the clipboard and pasted where You need it.")
                  )
         ),
         tabPanel("System information",
@@ -219,7 +215,6 @@ consumption"),
                      h3("Exploration data analysis"),
                      htmlOutput(outputId="eda")
                  ),
-                 
                  
                  wellPanel(
                      h3("Study design and concepts for prediction engine"),

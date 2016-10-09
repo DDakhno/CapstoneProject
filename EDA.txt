@@ -1,0 +1,12 @@
+Creating DocumentTermMatrix'es.
+Investigating top-X words by frequency.
+Word associations.
+Clustering by Term Similarity
+- Hierarchal Clustering
+- K-means clustering
+Word clouds.
+Word pairs (bigrams), sorted by rel. frequences.
+Word triplets (trigrams), sorted by rel. frequences.
+Four-grams sorted by rel. frequences.
+Pentagrams sorted by rel. frequences.
+Comparative statistical perfrormance of n-grams.

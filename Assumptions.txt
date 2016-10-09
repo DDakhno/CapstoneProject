@@ -1,0 +1,6 @@
+The word set of the HC text corpus was expected to mainly correspond to the standard English.
+Trivial English words and expressions were expected to be on the top by the frequency.
+Typos, conscious mutilations and word-building are usual in Internet language.
+Written expressive language of the news might differ from that of blogs or Twitter, the possible differences would not be studied or considered at that moment.
+Internet jargon and dialects like smiley's and emojies should become the subject of a studies, other than this one.
+Non-english words will be ignored, having the final goal of prediction in mind.

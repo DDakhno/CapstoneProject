@@ -1,0 +1,7 @@
+Data loading.
+Preliminary text corpus analysis and preprocessing the data.
+- all thre parts of HC Corpus have summarized 4269678 lines and 102073612 "words" (all non-blank char sequences).
+- statistical processing of the corpus as a whole is not possible due to capacities and time reasons.
+By means of random sampling (15% of all lines) with 21 processing iterations the coverage of above 97% lines has been reached.
+Removing of articles, numbers (low predictive strength) and of longer non-verbal character sequences and trimming the text with respect to white spaces and punctuation marks. 
+The lines, containing the non-ASCII characters, were filtered out (Chinese, Japanese, Russian, Hebrew words, emojis and so on - about 1.7%).

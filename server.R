@@ -125,6 +125,10 @@ reloadDBs <- function(...) {
 
 db_loaded <- reloadDBs()
 
+get_db_configuration <- function() { confEnv$db_loaded }
+
+db_loaded()
+    
 removeWordsNogo <- function(lin,wng) {
     tmp <- strsplit(lin, split ="[[:blank:]]+" )[[1]]
     mask <- tmp %in% wng
@@ -238,16 +242,10 @@ inWordPredictEngine <- function(xpr) {
         
         if(nrow(tmpEnv$cachedRtrn) > 0 & lastWd %like% tmpEnv$lastWord ) { 
             
-            # print("..In-word prediction, looking into the cached result of the last look-up.")
-            # print(lastWd)
-            # print(tmpEnv$lastWord)
-            # print(tmpEnv$cachedRtrn)
-            # print(paste("^",lastWd,".", sep = ""))
-            
             toLog("..In-word prediction, looking into the cached result of the last look-up.")
             rtrn <- tmpEnv$cachedRtrn %>% filter(outcome %like% paste("^",lastWd,".", sep = ""))
-            if (length(outcomes) > 0){
-                toLog(paste("....Matching outcomes found in cache, returning.",nrow(rtrn)))
+            if (nrow(rtrn) > 0){
+                toLog("....Matching outcomes found in cache, returning",nrow(rtrn))
                 finish <- TRUE
                 rtrn_sorted <- TRUE
                 tmpEnv$cachedRtrn <- rtrn
@@ -302,11 +300,11 @@ inWordPredictEngine <- function(xpr) {
             rtrn_sorted <- TRUE
         } else {
             toLog("..No results for in-word prediction for",lastWd)
-            toLog("....Starting axillary search in the reference word list.")
+            toLog("....Starting auxillary search in the reference word list.")
             rtrn <- as.data.table(bind_rows(rtrn, envData$dt_scowl[lastWd] %>% select(predictor,outcome,freq) ))
         }
     }
-    rtrn
+    na.omit(rtrn)
 }
 
 nextWordPrediction <- function(xx, iwp = TRUE) {
@@ -487,7 +485,7 @@ predictionEngine <- function(strg, shiny = FALSE) {
         
     } 
     
-    list(rtrn,tmpEnv$LOG)
+    list(na.omit(rtrn),tmpEnv$LOG)
 }
 
 
@@ -579,9 +577,9 @@ shinyServer(function(input, output, session) {
     
     
     observe({ if(!is.null(input$userInput) && stri_length(input$userInput) > 0)   {
-        rtrn <- wrapPE(input$userInput, TRUE)
+        rtrn <<- wrapPE(input$userInput, TRUE)
         updateSelectInput(session, 'inSelect', choices = c({ rtrn[[1]] }) )
-        updateSelectInput(session, 'LOG', choices = rtrn[[2]] )
+        output$LOG <- renderUI(HTML(paste(c(rtrn[[2]],paste(rtrn[[3]]*1000, "msec.")), collapse='<br/>')))
         output$execTime <- renderText(rtrn[[3]]*1000)
     }
     })
@@ -589,11 +587,10 @@ shinyServer(function(input, output, session) {
     
     
     observeEvent(
-        input$saveLog, {
-            if(identical(tmpEnv$LOG, c(""))) { tmpEnv$LOG = "empty log" }
-            try(fil <- file.choose())
-            try(writeLines(text = c(tmpEnv$LOG,tmpEnv$rtrn[[3]]*1000), con = fil))
-        }
+        input$copyToClipboard, {
+                log <- c(rtrn[[2]],paste("Exec.time",rtrn[[3]]*1000,"msec."))
+                clipr::write_clip(log)
+            }
     )
 })
 
